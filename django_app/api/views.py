@@ -21,16 +21,12 @@ from .serializers import (
 
 
 class CompanyListView(generics.ListAPIView):
-    """
-    GET /api/v1/companies/
-    Returns list of all companies with health scores.
-    Supports filtering by sector and health label.
-    """
     serializer_class   = CompanyListSerializer
     filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
     search_fields      = ["symbol", "company_name"]
     ordering_fields    = ["symbol", "company_name"]
     ordering           = ["symbol"]
+    pagination_class   = None
 
     def get_queryset(self):
         queryset = DimCompany.objects.select_related("sector").all()

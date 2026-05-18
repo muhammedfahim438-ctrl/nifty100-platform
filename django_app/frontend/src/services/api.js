@@ -13,7 +13,7 @@ const api = axios.create({
 
 // ── Companies ──
 export const getCompanies = (params = {}) =>
-  api.get('/companies/', { params });
+  api.get('/companies/', { params: { ...params, page_size: 100 } });
 
 export const getCompany = (symbol) =>
   api.get(`/companies/${symbol}/`);
