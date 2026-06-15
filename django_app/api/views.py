@@ -5,7 +5,6 @@ API Views for the Nifty 100 Financial Intelligence Platform.
 from rest_framework import generics, filters
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from django.db.models import Q
 
 from companies.models import (
     DimCompany, DimSector, FactProfitLoss,
@@ -123,15 +122,28 @@ def screener_view(request):
     Filter companies by financial criteria.
 
     Query params:
-        min_roe, max_dte, min_sales_growth, sector, health_label, min_score
+        min_score       — minimum ML health score (0-100)
+        health_label    — EXCELLENT / GOOD / AVERAGE / WEAK / POOR
+        sector          — sector name (case-insensitive)
+        min_roe         — minimum ROE% (from dim_company.roe_pct)
+        max_de          — maximum Debt-to-Equity (from fact_balance_sheet latest year)
     """
     companies = DimCompany.objects.select_related("sector").all()
 
+    # ── Sector filter ────────────────────────────────────────────────────────
     sector = request.query_params.get("sector")
     if sector:
         companies = companies.filter(sector__sector_name__iexact=sector)
 
-    # Filter by health label
+    # ── ROE filter — dim_company.roe_pct ─────────────────────────────────────
+    min_roe = request.query_params.get("min_roe")
+    if min_roe:
+        try:
+            companies = companies.filter(roe_pct__gte=float(min_roe))
+        except ValueError:
+            pass  # ignore malformed value
+
+    # ── Health score / label filter — fact_ml_scores ─────────────────────────
     health_label = request.query_params.get("health_label")
     min_score    = request.query_params.get("min_score")
 
@@ -140,9 +152,30 @@ def screener_view(request):
         if health_label:
             score_qs = score_qs.filter(health_label__iexact=health_label)
         if min_score:
-            score_qs = score_qs.filter(overall_score__gte=float(min_score))
+            try:
+                score_qs = score_qs.filter(overall_score__gte=float(min_score))
+            except ValueError:
+                pass
         valid_symbols = score_qs.values_list("symbol_id", flat=True)
         companies = companies.filter(symbol__in=valid_symbols)
+
+    # ── Max D/E filter — fact_balance_sheet latest non-TTM year ─────────────
+    max_de = request.query_params.get("max_de")
+    if max_de:
+        try:
+            max_de_val = float(max_de)
+            # Get latest non-TTM balance sheet row per company, filter by D/E
+            de_symbols = (
+                FactBalanceSheet.objects
+                .filter(year__is_ttm=False, debt_to_equity__isnull=False)
+                .filter(debt_to_equity__lte=max_de_val)
+                .order_by("symbol_id", "-year__sort_order")
+                .distinct("symbol_id")
+                .values_list("symbol_id", flat=True)
+            )
+            companies = companies.filter(symbol__in=list(de_symbols))
+        except ValueError:
+            pass
 
     serializer = CompanyListSerializer(companies, many=True)
     return Response({

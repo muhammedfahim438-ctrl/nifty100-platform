@@ -1,0 +1,630 @@
+{% extends "base.html" %}
+{% block title %}{{ company.symbol }} — {{ company.company_name }} | B100 Intelligence{% endblock %}
+
+{% block content %}
+
+<!-- ── Back ────────────────────────────────────────────────────────────────── -->
+<a href="/companies/" class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-navy mb-4 transition">
+  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+  </svg>
+  All Companies
+</a>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-5">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-3 mb-1">
+        <h1 class="text-2xl font-bold text-navy">{{ company.symbol }}</h1>
+        {% if score %}
+        <span class="text-sm px-2.5 py-0.5 rounded-full font-semibold health-{{ score.health_label|lower }}">
+          {{ score.health_label }}
+        </span>
+        {% endif %}
+      </div>
+      <div class="text-gray-600 text-base mb-2">{{ company.company_name }}</div>
+      <div class="text-sm text-gray-400">{{ company.sector.sector_name }}</div>
+    </div>
+
+    <!-- Links -->
+    <div class="flex gap-2 flex-wrap">
+      {% if company.website %}
+      <a href="{{ company.website }}" target="_blank"
+         class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:border-navy hover:text-navy transition">
+        Website ↗
+      </a>
+      {% endif %}
+      {% if company.nse_url %}
+      <a href="{{ company.nse_url }}" target="_blank"
+         class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:border-navy hover:text-navy transition">
+        NSE ↗
+      </a>
+      {% endif %}
+      {% if company.bse_url %}
+      <a href="{{ company.bse_url }}" target="_blank"
+         class="text-xs border border-gray-200 rounded-lg px-3 py-1.5 text-gray-600 hover:border-navy hover:text-navy transition">
+        BSE ↗
+      </a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Key ratios strip -->
+  <div class="mt-5 grid grid-cols-2 sm:grid-cols-5 gap-3 border-t border-gray-50 pt-5">
+    <div class="text-center">
+      <div class="text-lg font-bold text-navy">{{ company.roce_pct|default:"—" }}{% if company.roce_pct %}%{% endif %}</div>
+      <div class="text-xs text-gray-400 mt-0.5">ROCE</div>
+    </div>
+    <div class="text-center">
+      <div class="text-lg font-bold text-navy">{{ company.roe_pct|default:"—" }}{% if company.roe_pct %}%{% endif %}</div>
+      <div class="text-xs text-gray-400 mt-0.5">ROE</div>
+    </div>
+    <div class="text-center">
+      <div class="text-lg font-bold text-navy">₹{{ company.face_value|default:"—" }}</div>
+      <div class="text-xs text-gray-400 mt-0.5">Face Value</div>
+    </div>
+    <div class="text-center">
+      <div class="text-lg font-bold text-navy">₹{{ company.book_value|default:"—" }}</div>
+      <div class="text-xs text-gray-400 mt-0.5">Book Value</div>
+    </div>
+    <div class="text-center">
+      {% if score %}
+      <div class="text-lg font-bold text-navy">{{ score.overall_score }}</div>
+      {% else %}
+      <div class="text-lg font-bold text-gray-400">—</div>
+      {% endif %}
+      <div class="text-xs text-gray-400 mt-0.5">Health Score</div>
+    </div>
+  </div>
+
+  {% if is_banking %}
+  <div class="mt-3 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-700">
+    ⚠️ Banking company: Borrowings include customer deposits — D/E ratios are not comparable to non-financial companies.
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Tabs ────────────────────────────────────────────────────────────────── -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+
+  <!-- Tab nav -->
+  <div class="flex border-b border-gray-100 overflow-x-auto">
+    {% for tab in "Overview,Financials,Balance Sheet,Cash Flow,Health Score,Documents"|split:"," %}
+    <button onclick="switchTab('{{ tab|lower|slugify }}')" id="tab-btn-{{ tab|lower|slugify }}"
+      class="tab-btn px-5 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition
+             {% if forloop.first %}border-navy text-navy{% else %}border-transparent text-gray-500 hover:text-navy{% endif %}">
+      {{ tab }}
+    </button>
+    {% endfor %}
+  </div>
+
+  <!-- Loading state -->
+  <div id="data-loading" class="py-12 text-center text-gray-400">
+    <div class="text-sm">Loading financial data…</div>
+  </div>
+
+  <!-- ── Tab: Overview ──────────────────────────────────────────────────── -->
+  <div id="tab-overview" class="tab-panel p-6">
+    {% if company.about_company %}
+    <div class="mb-6">
+      <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">About</h3>
+      <p class="text-sm text-gray-600 leading-relaxed">{{ company.about_company }}</p>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div>
+        <h3 class="text-sm font-semibold text-green-700 uppercase tracking-wide mb-2">✓ Strengths</h3>
+        <ul id="pros-list" class="space-y-2">
+          <li class="text-sm text-gray-400">Loading…</li>
+        </ul>
+      </div>
+      <div>
+        <h3 class="text-sm font-semibold text-red-600 uppercase tracking-wide mb-2">✗ Concerns</h3>
+        <ul id="cons-list" class="space-y-2">
+          <li class="text-sm text-gray-400">Loading…</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Financials ────────────────────────────────────────────────── -->
+  <div id="tab-financials" class="tab-panel p-6 hidden">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+      <!-- Chart 1: Revenue & Profit Trend -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Revenue & Profit Trend (₹ Cr)</h3>
+        <div class="relative h-64"><canvas id="chart-revenue"></canvas></div>
+      </div>
+      <!-- Chart 7: Margin Trend -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Margin Trend (%)</h3>
+        <div class="relative h-64"><canvas id="chart-margin"></canvas></div>
+      </div>
+    </div>
+    <!-- P&L Table -->
+    <h3 class="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">Profit & Loss (₹ Cr)</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left" id="pl-table">
+        <thead class="bg-gray-50 text-gray-500 uppercase">
+          <tr>
+            <th class="py-2 px-3">Year</th>
+            <th class="py-2 px-3 text-right">Revenue</th>
+            <th class="py-2 px-3 text-right">Expenses</th>
+            <th class="py-2 px-3 text-right">Oper. Profit</th>
+            <th class="py-2 px-3 text-right">OPM%</th>
+            <th class="py-2 px-3 text-right">Net Profit</th>
+            <th class="py-2 px-3 text-right">EPS</th>
+            <th class="py-2 px-3 text-right">Dividend%</th>
+          </tr>
+        </thead>
+        <tbody id="pl-tbody" class="divide-y divide-gray-50"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Tab: Balance Sheet ─────────────────────────────────────────────── -->
+  <div id="tab-balance-sheet" class="tab-panel p-6 hidden">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+      <!-- Chart 2: Balance Sheet Composition -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Balance Sheet Composition (₹ Cr)</h3>
+        <div class="relative h-64"><canvas id="chart-balance"></canvas></div>
+      </div>
+      <!-- Chart 5: Debt vs Equity -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Debt vs Equity (₹ Cr)</h3>
+        <div class="relative h-64"><canvas id="chart-debt-equity"></canvas></div>
+      </div>
+    </div>
+    <h3 class="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">Balance Sheet (₹ Cr)</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left">
+        <thead class="bg-gray-50 text-gray-500 uppercase">
+          <tr>
+            <th class="py-2 px-3">Year</th>
+            <th class="py-2 px-3 text-right">Equity</th>
+            <th class="py-2 px-3 text-right">Reserves</th>
+            <th class="py-2 px-3 text-right">Borrowings</th>
+            <th class="py-2 px-3 text-right">Total Assets</th>
+            <th class="py-2 px-3 text-right">Fixed Assets</th>
+            <th class="py-2 px-3 text-right">D/E</th>
+          </tr>
+        </thead>
+        <tbody id="bs-tbody" class="divide-y divide-gray-50"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Tab: Cash Flow ─────────────────────────────────────────────────── -->
+  <div id="tab-cash-flow" class="tab-panel p-6 hidden">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+      <!-- Chart 3: Cash Flow Waterfall -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Cash Flow (₹ Cr)</h3>
+        <div class="relative h-64"><canvas id="chart-cashflow"></canvas></div>
+      </div>
+      <!-- Chart 4: EPS & Dividend -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">EPS & Dividend History</h3>
+        <div class="relative h-64"><canvas id="chart-eps"></canvas></div>
+      </div>
+    </div>
+    <h3 class="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">Cash Flow Statement (₹ Cr)</h3>
+    <div class="overflow-x-auto">
+      <table class="w-full text-xs text-left">
+        <thead class="bg-gray-50 text-gray-500 uppercase">
+          <tr>
+            <th class="py-2 px-3">Year</th>
+            <th class="py-2 px-3 text-right">Operating CF</th>
+            <th class="py-2 px-3 text-right">Investing CF</th>
+            <th class="py-2 px-3 text-right">Financing CF</th>
+            <th class="py-2 px-3 text-right">Net Cash Flow</th>
+            <th class="py-2 px-3 text-right">Free CF</th>
+          </tr>
+        </thead>
+        <tbody id="cf-tbody" class="divide-y divide-gray-50"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Tab: Health Score ──────────────────────────────────────────────── -->
+  <div id="tab-health-score" class="tab-panel p-6 hidden">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <!-- Chart 8: Gauge -->
+      <div class="bg-gray-50 rounded-xl p-4 flex flex-col items-center">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3 self-start">Overall Health Score</h3>
+        <div class="relative w-56 h-32"><canvas id="chart-gauge"></canvas></div>
+        <div id="gauge-label" class="text-3xl font-bold text-navy mt-2">—</div>
+        <div id="gauge-desc"  class="text-sm text-gray-500 mt-1">—</div>
+      </div>
+      <!-- Chart 6: CAGR Radar -->
+      <div class="bg-gray-50 rounded-xl p-4">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3">Score Dimensions</h3>
+        <div class="relative h-64"><canvas id="chart-radar"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Score breakdown bars -->
+    <div id="score-breakdown" class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </div>
+
+  <!-- ── Tab: Documents ─────────────────────────────────────────────────── -->
+  <div id="tab-documents" class="tab-panel p-6 hidden">
+    <h3 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Annual Reports</h3>
+    <div id="docs-list">
+      <div class="text-sm text-gray-400">Loading…</div>
+    </div>
+  </div>
+
+</div><!-- end card -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SYMBOL = "{{ symbol }}";
+let financialData = null;
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('border-navy', 'text-navy');
+    b.classList.add('border-transparent', 'text-gray-500');
+  });
+  document.getElementById('tab-' + id).classList.remove('hidden');
+  const btn = document.getElementById('tab-btn-' + id);
+  if (btn) {
+    btn.classList.add('border-navy', 'text-navy');
+    btn.classList.remove('border-transparent', 'text-gray-500');
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+const fmt  = v => (v == null || isNaN(parseFloat(v))) ? '—' : parseFloat(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
+const fmtP = v => (v == null || isNaN(parseFloat(v))) ? '—' : parseFloat(v).toFixed(2) + '%';
+const n    = v => parseFloat(v) || 0;
+
+// ── Fetch financials ───────────────────────────────────────────────────────
+fetch(`/api/v1/companies/${SYMBOL}/financials/`)
+  .then(r => r.json())
+  .then(data => {
+    financialData = data;
+    document.getElementById('data-loading').classList.add('hidden');
+
+    // Filter out TTM rows for charts
+    const pl  = (data.profit_loss  || []).filter(r => !r.is_ttm);
+    const bs  = (data.balance_sheet|| []).filter(r => !r.is_ttm);
+    const cf  = (data.cash_flow    || []).filter(r => !r.is_ttm);
+    const sc  = data.ml_score || null;
+
+    // Last 12 years for trend charts
+    const plLast12 = pl.slice(-12);
+    const bsLast12 = bs.slice(-12);
+    const cfLast12 = cf.slice(-12);
+    const labels   = plLast12.map(r => r.year_label || r.fiscal_year);
+
+    buildChart1(plLast12, labels);
+    buildChart2(bsLast12, bsLast12.map(r => r.year_label || r.fiscal_year));
+    buildChart3(cfLast12, cfLast12.map(r => r.year_label || r.fiscal_year));
+    buildChart4(plLast12, labels);
+    buildChart5(bsLast12, bsLast12.map(r => r.year_label || r.fiscal_year));
+    buildChart6(sc);
+    buildChart7(plLast12, labels);
+    buildChart8(sc);
+
+    buildPLTable(pl.slice(-8));
+    buildBSTable(bs.slice(-8));
+    buildCFTable(cf.slice(-8));
+    buildProsConsLists(data.pros || [], data.cons || []);
+    buildDocsList(data.documents || []);
+    buildScoreBreakdown(sc);
+  })
+  .catch(err => {
+    document.getElementById('data-loading').innerHTML =
+      `<div class="text-red-400 text-sm">Could not load data for ${SYMBOL}.</div>`;
+  });
+
+// ── Chart 1: Revenue & Profit Trend ───────────────────────────────────────
+function buildChart1(pl, labels) {
+  new Chart(document.getElementById('chart-revenue'), {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar',  label: 'Revenue (₹ Cr)',    data: pl.map(r => n(r.sales)),      backgroundColor: 'rgba(27,42,74,0.85)', yAxisID: 'y' },
+        { type: 'bar',  label: 'Net Profit (₹ Cr)', data: pl.map(r => n(r.net_profit)), backgroundColor: 'rgba(46,204,113,0.85)', yAxisID: 'y' },
+        { type: 'line', label: 'OPM%',               data: pl.map(r => n(r.opm_pct)),   borderColor: '#F5A623', backgroundColor: 'transparent', yAxisID: 'y2', tension: 0.3, pointRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: {
+        y:  { title: { display: true, text: '₹ Crores', font: { size: 10 } }, ticks: { font: { size: 10 } } },
+        y2: { position: 'right', title: { display: true, text: 'OPM%', font: { size: 10 } }, ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false } },
+        x:  { ticks: { font: { size: 9 }, maxRotation: 45 } }
+      }
+    }
+  });
+}
+
+// ── Chart 2: Balance Sheet Composition ────────────────────────────────────
+function buildChart2(bs, labels) {
+  new Chart(document.getElementById('chart-balance'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Equity + Reserves', data: bs.map(r => n(r.equity_capital) + n(r.reserves)), backgroundColor: 'rgba(46,204,113,0.85)', stack: 'bs' },
+        { label: 'Borrowings',        data: bs.map(r => n(r.borrowings)),                      backgroundColor: 'rgba(231,76,60,0.85)',   stack: 'bs' },
+        { label: 'Other Liabilities', data: bs.map(r => n(r.other_liabilities)),               backgroundColor: 'rgba(243,156,18,0.85)',  stack: 'bs' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: { x: { stacked: true, ticks: { font: { size: 9 }, maxRotation: 45 } }, y: { stacked: true, ticks: { font: { size: 10 } } } }
+    }
+  });
+}
+
+// ── Chart 3: Cash Flow ────────────────────────────────────────────────────
+function buildChart3(cf, labels) {
+  new Chart(document.getElementById('chart-cashflow'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Operating',  data: cf.map(r => n(r.operating_activity)),  backgroundColor: 'rgba(46,204,113,0.85)' },
+        { label: 'Investing',  data: cf.map(r => n(r.investing_activity)),  backgroundColor: 'rgba(46,134,222,0.85)' },
+        { label: 'Financing',  data: cf.map(r => n(r.financing_activity)),  backgroundColor: 'rgba(243,156,18,0.85)' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxRotation: 45 } }, y: { ticks: { font: { size: 10 } } } }
+    }
+  });
+}
+
+// ── Chart 4: EPS & Dividend ───────────────────────────────────────────────
+function buildChart4(pl, labels) {
+  new Chart(document.getElementById('chart-eps'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'EPS (₹)',        data: pl.map(r => n(r.eps)),              borderColor: '#1B2A4A', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3 },
+        { label: 'Dividend Payout%', data: pl.map(r => n(r.dividend_payout)), borderColor: '#F5A623', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, yAxisID: 'y2' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: {
+        y:  { title: { display: true, text: 'EPS (₹)',    font: { size: 10 } }, ticks: { font: { size: 10 } } },
+        y2: { position: 'right', title: { display: true, text: 'Dividend%', font: { size: 10 } }, ticks: { font: { size: 10 } }, grid: { drawOnChartArea: false } },
+        x:  { ticks: { font: { size: 9 }, maxRotation: 45 } }
+      }
+    }
+  });
+}
+
+// ── Chart 5: Debt vs Equity (Area) ────────────────────────────────────────
+function buildChart5(bs, labels) {
+  new Chart(document.getElementById('chart-debt-equity'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Borrowings (₹ Cr)', data: bs.map(r => n(r.borrowings)), borderColor: '#E74C3C', backgroundColor: 'rgba(231,76,60,0.15)', fill: true, tension: 0.3 },
+        { label: 'Reserves (₹ Cr)',   data: bs.map(r => n(r.reserves)),   borderColor: '#2ECC71', backgroundColor: 'rgba(46,204,113,0.15)', fill: true, tension: 0.3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: { x: { ticks: { font: { size: 9 }, maxRotation: 45 } }, y: { ticks: { font: { size: 10 } } } }
+    }
+  });
+}
+
+// ── Chart 6: Score Radar ──────────────────────────────────────────────────
+function buildChart6(sc) {
+  if (!sc) return;
+  new Chart(document.getElementById('chart-radar'), {
+    type: 'radar',
+    data: {
+      labels: ['Profitability', 'Growth', 'Leverage', 'Cash Flow', 'Dividend', 'Trend'],
+      datasets: [{
+        label: 'Score',
+        data: [
+          n(sc.profitability_score), n(sc.growth_score), n(sc.leverage_score),
+          n(sc.cashflow_score), n(sc.dividend_score), n(sc.trend_score)
+        ],
+        borderColor: '#1B2A4A',
+        backgroundColor: 'rgba(27,42,74,0.15)',
+        pointBackgroundColor: '#F5A623',
+        pointRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: { r: { min: 0, max: 100, ticks: { stepSize: 20, font: { size: 9 } }, pointLabels: { font: { size: 10 } } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+}
+
+// ── Chart 7: Margin Trend ─────────────────────────────────────────────────
+function buildChart7(pl, labels) {
+  new Chart(document.getElementById('chart-margin'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'OPM%',            data: pl.map(r => n(r.opm_pct)),             borderColor: '#1B2A4A', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3 },
+        { label: 'Net Profit Margin%', data: pl.map(r => n(r.net_profit_margin_pct)), borderColor: '#2ECC71', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { font: { size: 9 }, maxRotation: 45 } },
+        y: { title: { display: true, text: '%', font: { size: 10 } }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ── Chart 8: Health Score Gauge (doughnut speedometer) ────────────────────
+function buildChart8(sc) {
+  if (!sc) return;
+  const score = n(sc.overall_score);
+
+  // Speedometer: half-doughnut, rotate -90deg
+  // Segments: 0-35 red, 35-50 orange, 50-70 yellow, 70-85 light green, 85-100 green
+  // We draw: [35, 15, 20, 15, 15] = 100 total (the colored arc)
+  // Plus a 100-unit invisible lower half
+  const ctx = document.getElementById('chart-gauge').getContext('2d');
+
+  // Needle plugin
+  const needlePlugin = {
+    id: 'needle',
+    afterDraw(chart) {
+      const { ctx, chartArea: { top, left, right, bottom } } = chart;
+      const cx = (left + right) / 2;
+      const cy = bottom;
+      const r  = (right - left) / 2 * 0.75;
+
+      // Angle: score 0 → -Math.PI, score 100 → 0
+      const angle = Math.PI * (score / 100) - Math.PI;
+
+      ctx.save();
+      ctx.strokeStyle = '#1B2A4A';
+      ctx.lineWidth   = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+      ctx.stroke();
+      ctx.fillStyle = '#1B2A4A';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [35, 15, 20, 15, 15, 100],
+        backgroundColor: ['#E74C3C','#F39C12','#F1C40F','#2ECC71','#27AE60','transparent'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      circumference: 180,
+      rotation: -90,
+      cutout: '65%',
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    },
+    plugins: [needlePlugin],
+  });
+
+  document.getElementById('gauge-label').textContent = score.toFixed(1);
+  document.getElementById('gauge-desc').textContent  = sc.health_label || '—';
+}
+
+// ── Tables ─────────────────────────────────────────────────────────────────
+function buildPLTable(pl) {
+  document.getElementById('pl-tbody').innerHTML = pl.map(r =>
+    `<tr class="hover:bg-gray-50">
+      <td class="py-2 px-3 font-medium">${r.year_label || r.fiscal_year}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.sales)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.expenses)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.operating_profit)}</td>
+      <td class="py-2 px-3 text-right">${fmtP(r.opm_pct)}</td>
+      <td class="py-2 px-3 text-right ${n(r.net_profit)<0?'text-red-500':'text-green-600'}">${fmt(r.net_profit)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.eps)}</td>
+      <td class="py-2 px-3 text-right">${fmtP(r.dividend_payout)}</td>
+    </tr>`).join('');
+}
+
+function buildBSTable(bs) {
+  document.getElementById('bs-tbody').innerHTML = bs.map(r =>
+    `<tr class="hover:bg-gray-50">
+      <td class="py-2 px-3 font-medium">${r.year_label || r.fiscal_year}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.equity_capital)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.reserves)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.borrowings)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.total_assets)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.fixed_assets)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.debt_to_equity)}</td>
+    </tr>`).join('');
+}
+
+function buildCFTable(cf) {
+  document.getElementById('cf-tbody').innerHTML = cf.map(r =>
+    `<tr class="hover:bg-gray-50">
+      <td class="py-2 px-3 font-medium">${r.year_label || r.fiscal_year}</td>
+      <td class="py-2 px-3 text-right ${n(r.operating_activity)<0?'text-red-500':'text-green-600'}">${fmt(r.operating_activity)}</td>
+      <td class="py-2 px-3 text-right ${n(r.investing_activity)<0?'text-red-500':'text-green-600'}">${fmt(r.investing_activity)}</td>
+      <td class="py-2 px-3 text-right ${n(r.financing_activity)<0?'text-red-500':'text-green-600'}">${fmt(r.financing_activity)}</td>
+      <td class="py-2 px-3 text-right">${fmt(r.net_cash_flow)}</td>
+      <td class="py-2 px-3 text-right ${n(r.free_cash_flow)<0?'text-red-500':'text-green-600'}">${fmt(r.free_cash_flow)}</td>
+    </tr>`).join('');
+}
+
+function buildProsConsLists(pros, cons) {
+  document.getElementById('pros-list').innerHTML = pros.length
+    ? pros.map(p => `<li class="flex gap-2 text-sm text-gray-700"><span class="text-green-500 mt-0.5 flex-shrink-0">✓</span>${p.text}</li>`).join('')
+    : '<li class="text-sm text-gray-400">No data available.</li>';
+
+  document.getElementById('cons-list').innerHTML = cons.length
+    ? cons.map(c => `<li class="flex gap-2 text-sm text-gray-700"><span class="text-red-400 mt-0.5 flex-shrink-0">✗</span>${c.text}</li>`).join('')
+    : '<li class="text-sm text-gray-400">No data available.</li>';
+}
+
+function buildDocsList(docs) {
+  document.getElementById('docs-list').innerHTML = docs.length
+    ? `<div class="space-y-2">${docs.map(d =>
+        `<div class="flex items-center justify-between py-2 border-b border-gray-50">
+          <span class="text-sm text-gray-700">Annual Report ${d.year}</span>
+          ${d.annual_report
+            ? `<a href="${d.annual_report}" target="_blank" class="text-xs bg-navy text-white px-3 py-1 rounded-lg hover:bg-navy-light transition">Download PDF</a>`
+            : '<span class="text-xs text-gray-400">Not available</span>'}
+        </div>`).join('')}</div>`
+    : '<div class="text-sm text-gray-400">No annual reports found.</div>';
+}
+
+function buildScoreBreakdown(sc) {
+  if (!sc) return;
+  const dims = [
+    { label: 'Profitability', value: sc.profitability_score, color: 'bg-blue-500' },
+    { label: 'Growth',        value: sc.growth_score,        color: 'bg-green-500' },
+    { label: 'Leverage',      value: sc.leverage_score,      color: 'bg-yellow-500' },
+    { label: 'Cash Flow',     value: sc.cashflow_score,      color: 'bg-purple-500' },
+    { label: 'Dividend',      value: sc.dividend_score,      color: 'bg-orange-500' },
+    { label: 'Trend',         value: sc.trend_score,         color: 'bg-teal-500' },
+  ];
+  document.getElementById('score-breakdown').innerHTML = dims.map(d => {
+    const v = n(d.value);
+    return `<div class="bg-gray-50 rounded-xl p-4">
+      <div class="flex justify-between mb-2">
+        <span class="text-sm font-medium text-gray-700">${d.label}</span>
+        <span class="text-sm font-bold text-navy">${v.toFixed(1)}</span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="${d.color} h-2 rounded-full transition-all" style="width:${Math.min(v,100)}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Companies — B100 Intelligence{% endblock %}
+
+{% block content %}
+
+<div class="flex items-center justify-between mb-5">
+  <h1 class="text-xl font-bold text-navy">All Companies <span id="count-badge" class="ml-2 text-sm font-normal text-gray-400"></span></h1>
+</div>
+
+<!-- ── Filters ────────────────────────────────────────────────────────────── -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-5 flex flex-wrap gap-3 items-end">
+
+  <div class="flex flex-col gap-1 min-w-48">
+    <label class="text-xs text-gray-500 font-medium">Search</label>
+    <input id="filter-search" type="text" placeholder="Symbol or company name…"
+      value="{{ request.GET.search }}"
+      class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-navy" />
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <label class="text-xs text-gray-500 font-medium">Sector</label>
+    <select id="filter-sector" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-navy bg-white">
+      <option value="">All Sectors</option>
+      {% for sector in sectors %}
+      <option value="{{ sector.sector_name }}">{{ sector.sector_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <label class="text-xs text-gray-500 font-medium">Health Label</label>
+    <select id="filter-label" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-navy bg-white">
+      <option value="">All Labels</option>
+      <option value="EXCELLENT">Excellent</option>
+      <option value="GOOD">Good</option>
+      <option value="AVERAGE">Average</option>
+      <option value="WEAK">Weak</option>
+      <option value="POOR">Poor</option>
+    </select>
+  </div>
+
+  <div class="flex flex-col gap-1">
+    <label class="text-xs text-gray-500 font-medium">Sort By</label>
+    <select id="filter-sort" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-navy bg-white">
+      <option value="score">Health Score ↓</option>
+      <option value="roe">ROE% ↓</option>
+      <option value="symbol">Symbol A–Z</option>
+    </select>
+  </div>
+
+  <button onclick="resetFilters()"
+    class="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-500 hover:border-navy hover:text-navy transition">
+    Reset
+  </button>
+</div>
+
+<!-- ── Table ──────────────────────────────────────────────────────────────── -->
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+  <div id="company-table-wrap">
+    <div class="text-center py-16 text-gray-400">Loading companies…</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allCompanies = [];
+let scoreMap     = {};
+
+// ── Fetch companies and scores in parallel ────────────────────────────────
+Promise.all([
+  fetch('/api/v1/companies/').then(r => r.json()),
+  fetch('/api/v1/scores/').then(r => r.json()),
+]).then(([companies, scores]) => {
+  allCompanies = Array.isArray(companies) ? companies : [];
+
+  // Build score lookup: symbol → {score, label}
+  if (Array.isArray(scores)) {
+    scores.forEach(s => {
+      scoreMap[s.symbol] = {
+        score: parseFloat(s.overall_score),
+        label: s.health_label || 'UNKNOWN',
+      };
+    });
+  }
+
+  // Apply search param from URL if present
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('search')) {
+    document.getElementById('filter-search').value = params.get('search');
+  }
+
+  render();
+}).catch(() => {
+  document.getElementById('company-table-wrap').innerHTML =
+    '<div class="text-center py-16 text-red-400">Could not load company data.</div>';
+});
+
+// ── Render table ───────────────────────────────────────────────────────────
+function render() {
+  const search = document.getElementById('filter-search').value.toLowerCase();
+  const sector = document.getElementById('filter-sector').value;
+  const label  = document.getElementById('filter-label').value;
+  const sort   = document.getElementById('filter-sort').value;
+
+  let rows = allCompanies.filter(c => {
+    if (search && !c.symbol.toLowerCase().includes(search) &&
+        !(c.company_name||'').toLowerCase().includes(search)) return false;
+    if (sector && (c.sector_name||'').toLowerCase() !== sector.toLowerCase()) return false;
+    if (label) {
+      const sl = (scoreMap[c.symbol]?.label || '').toUpperCase();
+      if (sl !== label) return false;
+    }
+    return true;
+  });
+
+  // Sort
+  rows.sort((a, b) => {
+    if (sort === 'score') {
+      return (scoreMap[b.symbol]?.score || 0) - (scoreMap[a.symbol]?.score || 0);
+    } else if (sort === 'roe') {
+      return (parseFloat(b.roe_pct) || 0) - (parseFloat(a.roe_pct) || 0);
+    } else {
+      return a.symbol.localeCompare(b.symbol);
+    }
+  });
+
+  document.getElementById('count-badge').textContent = `(${rows.length} companies)`;
+
+  if (rows.length === 0) {
+    document.getElementById('company-table-wrap').innerHTML =
+      '<div class="text-center py-16 text-gray-400">No companies match your filters.</div>';
+    return;
+  }
+
+  const tbody = rows.map(c => {
+    const sm    = scoreMap[c.symbol] || {};
+    const score = isNaN(sm.score) ? '—' : sm.score.toFixed(1);
+    const lbl   = sm.label || 'UNKNOWN';
+    const cls   = 'health-' + lbl.toLowerCase();
+    const roe   = c.roe_pct  ? parseFloat(c.roe_pct).toFixed(1)  + '%' : '—';
+    const roce  = c.roce_pct ? parseFloat(c.roce_pct).toFixed(1) + '%' : '—';
+    return `<tr class="border-b border-gray-50 hover:bg-blue-50 cursor-pointer transition"
+                onclick="location.href='/company/${c.symbol}/'">
+      <td class="py-3 px-4 font-bold text-navy text-sm">${c.symbol}</td>
+      <td class="py-3 px-4 text-sm text-gray-800 max-w-xs truncate">${c.company_name || '—'}</td>
+      <td class="py-3 px-4 text-sm text-gray-500">${c.sector_name || '—'}</td>
+      <td class="py-3 px-4">
+        <div class="flex items-center gap-2">
+          <div class="w-16 bg-gray-100 rounded-full h-1.5">
+            <div class="h-1.5 rounded-full bg-navy" style="width:${Math.min(parseFloat(sm.score)||0,100)}%"></div>
+          </div>
+          <span class="text-sm font-semibold">${score}</span>
+        </div>
+      </td>
+      <td class="py-3 px-4"><span class="text-xs px-2 py-0.5 rounded-full font-medium ${cls}">${lbl}</span></td>
+      <td class="py-3 px-4 text-sm text-gray-600">${roce}</td>
+      <td class="py-3 px-4 text-sm text-gray-600">${roe}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('company-table-wrap').innerHTML = `
+    <table class="w-full text-left">
+      <thead class="bg-gray-50">
+        <tr class="text-xs text-gray-500 uppercase tracking-wide border-b border-gray-100">
+          <th class="py-3 px-4">Symbol</th>
+          <th class="py-3 px-4">Company</th>
+          <th class="py-3 px-4">Sector</th>
+          <th class="py-3 px-4">Health Score</th>
+          <th class="py-3 px-4">Label</th>
+          <th class="py-3 px-4">ROCE%</th>
+          <th class="py-3 px-4">ROE%</th>
+        </tr>
+      </thead>
+      <tbody>${tbody}</tbody>
+    </table>`;
+}
+
+function resetFilters() {
+  document.getElementById('filter-search').value = '';
+  document.getElementById('filter-sector').value = '';
+  document.getElementById('filter-label').value  = '';
+  document.getElementById('filter-sort').value   = 'score';
+  render();
+}
+
+// Live filter on input
+['filter-search','filter-sector','filter-label','filter-sort'].forEach(id => {
+  document.getElementById(id).addEventListener('input', render);
+  document.getElementById(id).addEventListener('change', render);
+});
+</script>
+{% endblock %}

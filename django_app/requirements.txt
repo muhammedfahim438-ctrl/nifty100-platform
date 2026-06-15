@@ -1,0 +1,38 @@
+# ── Core Django ───────────────────────────────────────────────────────────────
+django==4.2.*
+djangorestframework==3.15.*
+django-cors-headers==4.3.*
+drf-spectacular==0.27.*
+django-filter==24.*
+
+# ── Database ──────────────────────────────────────────────────────────────────
+psycopg2-binary==2.9.*
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+djangorestframework-simplejwt==5.3.*
+bcrypt==4.1.*
+
+# ── Caching / Task Queue ──────────────────────────────────────────────────────
+django-redis==5.4.*
+celery[redis]==5.3.*
+
+# ── Config / Secrets ──────────────────────────────────────────────────────────
+python-decouple==3.8
+
+# ── Data / ML (pre-built wheels — avoids Windows Meson/compiler issues) ───────
+numpy==2.2.6
+pandas==2.2.3
+sqlalchemy==2.0.*
+scikit-learn==1.6.*
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==7.4.*
+pytest-django==4.7.*
+pytest-cov==4.1.*
+
+# ── Code Quality & Security ───────────────────────────────────────────────────
+bandit==1.7.*
+safety==3.2.*
+black==24.*
+isort==5.13.*
+flake8==7.*

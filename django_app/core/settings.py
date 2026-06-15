@@ -2,12 +2,8 @@
 Django Settings for Nifty 100 Financial Intelligence Platform
 """
 
-import os
 from pathlib import Path
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
+from decouple import config, Csv
 
 # ─────────────────────────────────────────────
 # Base Directory
@@ -17,9 +13,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ─────────────────────────────────────────────
 # Security
 # ─────────────────────────────────────────────
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-nifty100-dev-key-change-in-production")
-DEBUG = os.getenv("DEBUG", "True") == "True"
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
+SECRET_KEY = config("SECRET_KEY")
+DEBUG = config("DEBUG", default=False, cast=bool)
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
 
 # ─────────────────────────────────────────────
 # Installed Apps
@@ -33,12 +29,16 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     # Third party
     "rest_framework",
+    "rest_framework_simplejwt",
     "corsheaders",
     "drf_spectacular",
+    "django_filters",
     # Our apps
     "companies",
     "api",
     "admin_insights",
+    "accounts",
+    "api_management",
 ]
 
 # ─────────────────────────────────────────────
@@ -47,7 +47,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
+    "corsheaders.middleware.CorsMiddleware",          # must be before CommonMiddleware
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -84,11 +84,25 @@ WSGI_APPLICATION = "core.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE"  : "django.db.backends.postgresql",
-        "NAME"    : os.getenv("DB_NAME",     "nifty100"),
-        "USER"    : os.getenv("DB_USER",     "postgres"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "postgres123"),
-        "HOST"    : os.getenv("DB_HOST",     "localhost"),
-        "PORT"    : os.getenv("DB_PORT",     "5433"),
+        "NAME"    : config("DB_NAME",     default="nifty100"),
+        "USER"    : config("DB_USER",     default="postgres"),
+        "PASSWORD": config("DB_PASSWORD"),               # no fallback — must be in .env
+        "HOST"    : config("DB_HOST",     default="localhost"),
+        "PORT"    : config("DB_PORT",     default="5433"),
+    }
+}
+
+# ─────────────────────────────────────────────
+# Cache — Redis (django-redis, 60-min TTL)
+# ─────────────────────────────────────────────
+CACHES = {
+    "default": {
+        "BACKEND" : "django_redis.cache.RedisCache",
+        "LOCATION": config("REDIS_URL", default="redis://127.0.0.1:6379/0"),
+        "OPTIONS" : {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        },
+        "TIMEOUT": 3600,   # 60 minutes
     }
 }
 
@@ -113,9 +127,9 @@ USE_TZ        = True
 # ─────────────────────────────────────────────
 # Static Files
 # ─────────────────────────────────────────────
-STATIC_URL        = "/static/"
-STATICFILES_DIRS  = [BASE_DIR / "static"]
-STATIC_ROOT       = BASE_DIR / "staticfiles"
+STATIC_URL       = "/static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT      = BASE_DIR / "staticfiles"
 
 # ─────────────────────────────────────────────
 # Default Primary Key
@@ -133,20 +147,42 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon"     : "100/hour",   # public API anonymous limit
+        "user"     : "1000/hour",  # authenticated user limit
+        "login"    : "5/min",      # JWT login endpoint hard limit (Step 8)
+    },
 }
 
 # ─────────────────────────────────────────────
-# CORS
+# JWT Settings
+# ─────────────────────────────────────────────
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME" : timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS" : True,
+    "AUTH_HEADER_TYPES"     : ("Bearer",),
+}
+
+# ─────────────────────────────────────────────
+# CORS — locked to explicit origins only
 # ─────────────────────────────────────────────
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
 ]
-
-CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOW_ALL_ORIGINS is intentionally NOT set (was True before — security risk)
+
 # ─────────────────────────────────────────────
 # API Documentation
 # ─────────────────────────────────────────────
@@ -155,3 +191,18 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "REST API for Nifty 100 financial data",
     "VERSION"    : "1.0.0",
 }
+
+# ─────────────────────────────────────────────
+# Celery — Redis broker
+# ─────────────────────────────────────────────
+CELERY_BROKER_URL        = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND    = config("REDIS_URL", default="redis://127.0.0.1:6379/0")
+CELERY_ACCEPT_CONTENT    = ["json"]
+CELERY_TASK_SERIALIZER   = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE          = "Asia/Kolkata"
+
+# ─────────────────────────────────────────────
+# Power BI Gateway Token (used in Step 10 tasks)
+# ─────────────────────────────────────────────
+PBI_GATEWAY_TOKEN = config("PBI_GATEWAY_TOKEN", default="")
