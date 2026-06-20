@@ -3,12 +3,20 @@ api/serializers.py
 DRF serializers for the public REST API (/api/v1/).
 These power every Chart.js chart and table in the Django templates.
 """
+import math
 from rest_framework import serializers
 from companies.models import (
     DimCompany, DimSector, DimYear,
     FactProfitLoss, FactBalanceSheet, FactCashFlow,
     FactAnalysis, FactMLScore, FactProsCons, FactDocument,
 )
+
+
+class NanSafeFloatField(serializers.FloatField):
+    def to_representation(self, value):
+        if value is None or (isinstance(value, float) and (math.isnan(value) or math.isinf(value))):
+            return None
+        return super().to_representation(value)
 
 
 class SectorSerializer(serializers.ModelSerializer):
@@ -59,6 +67,8 @@ class ProfitLossSerializer(serializers.ModelSerializer):
 
 class BalanceSheetSerializer(serializers.ModelSerializer):
     year_label = serializers.CharField(source='year.year_label', read_only=True, default=None)
+    debt_to_equity = NanSafeFloatField()
+    equity_ratio = NanSafeFloatField()
 
     class Meta:
         model = FactBalanceSheet
@@ -66,7 +76,7 @@ class BalanceSheetSerializer(serializers.ModelSerializer):
             'year_label', 'equity_capital', 'reserves', 'borrowings',
             'other_liabilities', 'total_liabilities', 'fixed_assets',
             'cwip', 'investments', 'other_assets', 'total_assets',
-            'debt_to_equity', 'equity_ratio', 'book_value_per_share',
+            'debt_to_equity', 'equity_ratio',
         ]
 
 

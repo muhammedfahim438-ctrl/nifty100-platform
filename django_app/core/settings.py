@@ -97,16 +97,30 @@ DATABASES = {
 # ─────────────────────────────────────────────
 # Cache — Redis (django-redis, 60-min TTL)
 # ─────────────────────────────────────────────
-CACHES = {
-    "default": {
-        "BACKEND" : "django_redis.cache.RedisCache",
-        "LOCATION": config("REDIS_URL", default="redis://127.0.0.1:6379/0"),
-        "OPTIONS" : {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        },
-        "TIMEOUT": 3600,   # 60 minutes
+# Cache — Redis with graceful fallback to in-memory if Redis is unavailable
+try:
+    import django_redis  # noqa: F401
+    import redis as _redis_lib
+    _r = _redis_lib.Redis.from_url(config("REDIS_URL", default="redis://127.0.0.1:6379/0"))
+    _r.ping()  # Verify Redis is reachable
+    CACHES = {
+        "default": {
+            "BACKEND" : "django_redis.cache.RedisCache",
+            "LOCATION": config("REDIS_URL", default="redis://127.0.0.1:6379/0"),
+            "OPTIONS" : {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+            "TIMEOUT": 3600,   # 60 minutes
+        }
     }
-}
+except Exception:
+    # Redis not available — fall back to local memory cache (dev/test only)
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "TIMEOUT": 3600,
+        }
+    }
 
 # ─────────────────────────────────────────────
 # Password Validation
@@ -145,8 +159,9 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS"     : "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS" : "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE"                : 20,
+    # Use our NaN-safe renderer so float('nan') DB values don't crash the API
     "DEFAULT_RENDERER_CLASSES" : [
-        "rest_framework.renderers.JSONRenderer",
+        "core.renderers.NaNSafeJSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -217,18 +232,20 @@ RATE_LIMITS = {
 # ─────────────────────────────────────────────
 # Celery Beat — Nightly Scheduled Tasks
 # ─────────────────────────────────────────────
-from celery.schedules import crontab
-
-CELERY_BEAT_SCHEDULE = {
-    "refresh-all-scores-nightly": {
-        "task": "ml_engine.tasks.refresh_all_scores",
-        "schedule": crontab(hour=2, minute=0),
-    },
-    "run-anomaly-detection-nightly": {
-        "task": "ml_engine.tasks.run_anomaly_detection",
-        "schedule": crontab(hour=3, minute=0),
-    },
-}
+try:
+    from celery.schedules import crontab
+    CELERY_BEAT_SCHEDULE = {
+        "refresh-all-scores-nightly": {
+            "task": "ml_engine.tasks.refresh_all_scores",
+            "schedule": crontab(hour=2, minute=0),
+        },
+        "run-anomaly-detection-nightly": {
+            "task": "ml_engine.tasks.run_anomaly_detection",
+            "schedule": crontab(hour=3, minute=0),
+        },
+    }
+except ImportError:
+    CELERY_BEAT_SCHEDULE = {}
 
 # ─────────────────────────────────────────────
 # Power BI Gateway Token

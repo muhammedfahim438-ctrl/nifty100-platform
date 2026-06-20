@@ -1,0 +1,68 @@
+{% extends "admin_insights/admin_base.html" %}
+
+{% block admin_content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-navy">Celery Task Monitor</h1>
+  <p class="text-sm text-gray-500">Monitor background task queues, nightly beat schedules, and trigger runs manually.</p>
+</div>
+
+<!-- Scheduled tasks -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-6">
+  <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+    <h2 class="text-base font-bold text-navy">Scheduled Nightly Jobs (Beat)</h2>
+    <p class="text-xs text-gray-500">Scheduled task routines registered in core/settings.py.</p>
+  </div>
+  
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse text-xs">
+      <thead>
+        <tr class="bg-gray-50 border-b border-gray-150">
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Task Identifier</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Module Location</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Schedule Schedule</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-150">
+        {% for task in scheduled_tasks %}
+        <tr class="hover:bg-gray-50 transition">
+          <td class="px-6 py-4 font-bold text-navy font-mono">{{ task.name }}</td>
+          <td class="px-6 py-4 font-mono text-gray-600">{{ task.task }}</td>
+          <td class="px-6 py-4 text-gray-600 font-semibold">{{ task.schedule }}</td>
+          <td class="px-6 py-4 text-right">
+            <form method="post" action="{% url 'admin_insights:trigger_celery_task' %}" class="inline">
+              {% csrf_token %}
+              {% if 'refresh_all_scores' in task.task %}
+                <input type="hidden" name="task_name" value="refresh_all_scores" />
+              {% else %}
+                <input type="hidden" name="task_name" value="run_anomaly_detection" />
+              {% endif %}
+              <button type="submit" class="px-2.5 py-1 bg-navy text-white font-bold rounded hover:bg-navy-light transition shadow-sm text-[10px]">
+                Run Now
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Celery Worker Status Guide -->
+<div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+  <h3 class="text-base font-bold text-navy mb-2">Celery Worker Diagnostics</h3>
+  <p class="text-xs text-gray-500 mb-4">How to start, track, and debug Celery workers on your developer workspace.</p>
+  
+  <div class="space-y-3 font-mono text-xs text-gray-600">
+    <div class="p-3 bg-gray-50 rounded border border-gray-150">
+      <div class="font-bold text-navy mb-1"># Command to launch the worker:</div>
+      <div class="select-all">celery -A core worker -l info</div>
+    </div>
+    <div class="p-3 bg-gray-50 rounded border border-gray-150">
+      <div class="font-bold text-navy mb-1"># Command to launch the scheduler (beat):</div>
+      <div class="select-all">celery -A core beat -l info</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -22,7 +22,18 @@ from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from drf_spectacular.utils import extend_schema, OpenApiParameter
+try:
+    from drf_spectacular.utils import extend_schema, OpenApiParameter
+except Exception:  # pragma: no cover - optional dev dependency
+    # Provide no-op fallbacks when drf-spectacular isn't installed (e.g. in lints/CI)
+    def extend_schema(*a, **k):
+        def _decorator(f):
+            return f
+        return _decorator
+
+    class OpenApiParameter:  # minimal placeholder
+        def __init__(self, *args, **kwargs):
+            pass
 
 from .models import ChannelPartner, APIKey, WebhookEndpoint, WebhookEvent
 from .serializers import (
@@ -111,13 +122,71 @@ class PartnerAPIBaseView(APIView):
 
     def _auth(self, request):
         """Returns (api_key, partner) or sends a 401 Response."""
+        if getattr(request, '_auth_error', None):
+            return None, request._auth_error
+        return getattr(request, 'api_key', None), None
+
+    def dispatch(self, request, *args, **kwargs):
+        start_time = time.time()
+        
+        request_size = 0
         try:
-            return authenticate_partner(request)
+            if request.body:
+                request_size = len(request.body)
+        except Exception:
+            pass
+
+        # Perform authentication early so throttle has access to request.user
+        try:
+            api_key, partner = authenticate_partner(request)
+            request.user = partner
+            request.api_key = api_key
+            auth_error = None
         except ValueError as e:
-            return None, Response(
+            request.user = None
+            request.api_key = None
+            auth_error = Response(
                 {'error': 'authentication_failed', 'message': str(e)},
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
+        request._auth_error = auth_error
+
+        response = super().dispatch(request, *args, **kwargs)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        response_size = 0
+        try:
+            if hasattr(response, 'rendered_content'):
+                response_size = len(response.rendered_content)
+            elif hasattr(response, 'content'):
+                response_size = len(response.content)
+        except Exception:
+            pass
+
+        key_id = request.headers.get('X-API-Key-ID')
+        if key_id:
+            ip_address = None
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0].strip()
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+
+            from .tasks import log_api_usage
+            log_api_usage.delay(
+                key_id=key_id,
+                endpoint=request.path,
+                method=request.method,
+                status_code=response.status_code,
+                response_time_ms=response_time_ms,
+                ip_address=ip_address,
+                request_size=request_size,
+                response_size=response_size
+            )
+
+        return response
 
 
 # ─── Company Data Endpoints ─────────────────────────────────────────────────────

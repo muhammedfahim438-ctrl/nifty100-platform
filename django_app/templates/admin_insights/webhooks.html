@@ -1,0 +1,108 @@
+{% extends "admin_insights/admin_base.html" %}
+
+{% block admin_content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-navy">Webhooks & Events</h1>
+  <p class="text-sm text-gray-500">Monitor webhook dispatch channels and log deliveries to channel partners.</p>
+</div>
+
+<!-- Webhook Endpoints -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-8">
+  <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+    <h2 class="text-base font-bold text-navy">Registered Endpoints</h2>
+    <p class="text-xs text-gray-500">URLs configured by developers to receive event notifications.</p>
+  </div>
+  
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse text-xs">
+      <thead>
+        <tr class="bg-gray-50 border-b border-gray-150">
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Partner</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Event Subscription</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">URL</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-center">Status</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Registered</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-150">
+        {% for ep in endpoints %}
+        <tr class="hover:bg-gray-50 transition">
+          <td class="px-6 py-4 font-semibold text-navy">{{ ep.partner.company_name }}</td>
+          <td class="px-6 py-4">
+            <span class="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-100 font-mono">
+              {{ ep.event_type }}
+            </span>
+          </td>
+          <td class="px-6 py-4 font-mono text-gray-600 truncate max-w-sm" title="{{ ep.url }}">{{ ep.url }}</td>
+          <td class="px-6 py-4 text-center">
+            {% if ep.is_active %}
+              <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">Active</span>
+            {% else %}
+              <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 text-gray-500">{{ ep.created_at|date:"M d, Y" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="px-6 py-6 text-center text-gray-400">No registered webhook endpoints found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Webhook Delivery Logs -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+  <div class="px-6 py-4 bg-gray-50 border-b border-gray-200">
+    <h2 class="text-base font-bold text-navy">Webhook Delivery Events (Last 100)</h2>
+    <p class="text-xs text-gray-500">Live logs showing delivery statuses, retries, and target responses.</p>
+  </div>
+  
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse text-xs">
+      <thead>
+        <tr class="bg-gray-50 border-b border-gray-150">
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Partner</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">URL</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Event</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-center">Status</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-center">Attempts</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-center">HTTP Status</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Time</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider">Response Details</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-150">
+        {% for event in events %}
+        <tr class="hover:bg-gray-50 transition align-middle">
+          <td class="px-6 py-3 font-semibold text-navy">{{ event.endpoint.partner.company_name }}</td>
+          <td class="px-6 py-3 font-mono text-gray-500 truncate max-w-xs" title="{{ event.endpoint.url }}">{{ event.endpoint.url }}</td>
+          <td class="px-6 py-3 font-mono text-xs text-gray-600">{{ event.event_type }}</td>
+          <td class="px-6 py-3 text-center">
+            {% if event.status == 'SUCCESS' %}
+              <span class="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">Success</span>
+            {% elif event.status == 'FAILED' %}
+              <span class="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">Failed</span>
+            {% elif event.status == 'RETRYING' %}
+              <span class="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">Retrying</span>
+            {% else %}
+              <span class="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-800">Pending</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-3 text-center text-gray-700 font-semibold">{{ event.attempt_count }} / {{ event.max_attempts }}</td>
+          <td class="px-6 py-3 text-center text-gray-800 font-mono">{{ event.response_status_code|default:"—" }}</td>
+          <td class="px-6 py-3 text-gray-500">{{ event.created_at|date:"M d, H:i:s" }}</td>
+          <td class="px-6 py-3 text-gray-600 truncate max-w-xs" title="{{ event.response_body }}">{{ event.response_body|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8" class="px-6 py-6 text-center text-gray-400">No webhook delivery logs registered yet.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

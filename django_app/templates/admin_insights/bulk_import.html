@@ -1,0 +1,96 @@
+{% extends "admin_insights/admin_base.html" %}
+
+{% block admin_content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-bold text-navy">Bulk Data Import</h1>
+  <p class="text-sm text-gray-500">Upload financial spreadsheets in CSV format to populate profit &amp; loss, balance sheet, or cash flow records.</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Upload Card -->
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+    <h2 class="text-base font-bold text-navy mb-4">Upload Spreadsheet</h2>
+    
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
+      {% csrf_token %}
+      
+      <div>
+        <label for="import_type" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Import Target Type</label>
+        <select name="import_type" id="import_type" class="w-full md:w-80 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-navy text-sm bg-white">
+          <option value="profit_loss">Profit &amp; Loss (Sales, Expenses, Margins)</option>
+          <option value="balance_sheet">Balance Sheet (Assets, Borrowings, Equity)</option>
+          <option value="cash_flow">Cash Flow (Operating, Investing, Financing)</option>
+        </select>
+      </div>
+      
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">CSV File</label>
+        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md hover:border-navy transition">
+          <div class="space-y-1 text-center">
+            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <div class="flex text-sm text-gray-600 justify-center">
+              <label for="csv_file" class="relative cursor-pointer bg-white rounded-md font-semibold text-navy hover:text-gold focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-navy">
+                <span>Upload a file</span>
+                <input id="csv_file" name="csv_file" type="file" required accept=".csv" class="sr-only" onchange="updateFileName(this)">
+              </label>
+              <p class="pl-1">or drag and drop</p>
+            </div>
+            <p class="text-xs text-gray-500" id="file_name_display">CSV files up to 10MB</p>
+          </div>
+        </div>
+      </div>
+      
+      <div class="pt-4 border-t border-gray-150">
+        <button type="submit" class="w-full md:w-auto px-6 py-2.5 bg-navy text-white font-semibold rounded text-sm hover:bg-navy-light transition shadow-sm">
+          Run Bulk Import
+        </button>
+      </div>
+    </form>
+  </div>
+  
+  <!-- File Schema Guide Card -->
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 lg:col-span-1">
+    <h2 class="text-base font-bold text-navy mb-4">CSV Schema Guide</h2>
+    <p class="text-xs text-gray-500 mb-4">Spreadsheets must align with the target schema and map directly to existing companies and fiscal years.</p>
+    
+    <div class="space-y-4 text-xs">
+      <div class="p-3 bg-gray-50 rounded border border-gray-150">
+        <div class="font-semibold text-navy mb-1">Required Base Fields:</div>
+        <ul class="list-disc pl-4 space-y-1 text-gray-600">
+          <li><strong>company_id</strong> or <strong>symbol</strong> (e.g. INFY, TCS)</li>
+          <li><strong>year_label</strong> (e.g. Mar 2024, Mar 2023)</li>
+        </ul>
+      </div>
+
+      <div class="p-3 bg-gray-50 rounded border border-gray-150">
+        <div class="font-semibold text-navy mb-1">Profit &amp; Loss Target Fields:</div>
+        <div class="font-mono text-gray-500 leading-relaxed">
+          sales, expenses, operating_profit, opm_percentage, other_income, interest, depreciation, profit_before_tax, tax_percentage, net_profit, eps, dividend_payout
+        </div>
+      </div>
+
+      <div class="p-3 bg-gray-50 rounded border border-gray-150">
+        <div class="font-semibold text-navy mb-1">Balance Sheet Target Fields:</div>
+        <div class="font-mono text-gray-500 leading-relaxed">
+          equity_capital, reserves, borrowings, other_liabilities, total_liabilities, fixed_assets, cwip, investments, other_asset, total_assets
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function updateFileName(input) {
+    const display = document.getElementById('file_name_display');
+    if (input.files && input.files.length > 0) {
+      display.innerHTML = `<strong class="text-navy font-semibold">${input.files[0].name}</strong> (${(input.files[0].size/1024).toFixed(1)} KB)`;
+    } else {
+      display.innerText = 'CSV files up to 10MB';
+    }
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,156 @@
+{% extends "admin_insights/admin_base.html" %}
+
+{% block admin_content %}
+<div class="mb-6 flex justify-between items-center">
+  <div>
+    <h1 class="text-2xl font-bold text-navy">Anomalies & Alerts</h1>
+    <p class="text-sm text-gray-500">Review mathematical data outliers flagged by the ML pipeline.</p>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+  <form method="get" class="flex flex-col md:flex-row gap-4 items-end">
+    <div class="w-full md:w-48">
+      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Severity</label>
+      <select name="severity" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-navy text-sm bg-white">
+        <option value="">All Severities</option>
+        <option value="HIGH" {% if severity_filter == 'HIGH' %}selected{% endif %}>HIGH</option>
+        <option value="MEDIUM" {% if severity_filter == 'MEDIUM' %}selected{% endif %}>MEDIUM</option>
+        <option value="LOW" {% if severity_filter == 'LOW' %}selected{% endif %}>LOW</option>
+      </select>
+    </div>
+
+    <div class="w-full md:w-48">
+      <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Review Status</label>
+      <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-navy text-sm bg-white">
+        <option value="">All Statuses</option>
+        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending Review</option>
+        <option value="reviewed" {% if status_filter == 'reviewed' %}selected{% endif %}>Reviewed</option>
+      </select>
+    </div>
+
+    <div class="flex gap-2 w-full md:w-auto">
+      <button type="submit" class="flex-1 md:flex-initial px-4 py-2 bg-navy text-white font-semibold rounded text-sm hover:bg-navy-light transition">Filter</button>
+      <a href="{% url 'admin_insights:anomalies' %}" class="flex-1 md:flex-initial px-4 py-2 bg-gray-100 text-gray-700 font-semibold rounded text-sm hover:bg-gray-200 transition text-center no-underline">Reset</a>
+    </div>
+  </form>
+</div>
+
+<!-- Anomalies Table -->
+<div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full text-left border-collapse text-sm">
+      <thead>
+        <tr class="bg-gray-50 border-b border-gray-200">
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs">Symbol</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs text-center">Year</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs">Metric</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs text-center">Z-Score</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs text-center">Severity</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs text-center">Method</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs text-center">Status</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs">Notes</th>
+          <th class="px-6 py-3 font-semibold text-gray-500 uppercase tracking-wider text-xs text-center">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for a in anomalies %}
+        <tr class="hover:bg-gray-50 transition align-middle">
+          <td class="px-6 py-4 font-bold text-navy">{{ a.symbol }}</td>
+          <td class="px-6 py-4 text-center text-gray-700">{{ a.year|default:"—" }}</td>
+          <td class="px-6 py-4 font-medium text-gray-800">{{ a.metric|default:"—" }}</td>
+          <td class="px-6 py-4 text-center text-gray-600 font-mono">{{ a.z_score|floatformat:2|default:"—" }}</td>
+          <td class="px-6 py-4 text-center">
+            {% if a.severity == 'HIGH' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-800">High</span>
+            {% elif a.severity == 'MEDIUM' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">Medium</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-800">Low</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 text-center text-xs text-gray-500 font-mono">{{ a.detected_method|default:"—" }}</td>
+          <td class="px-6 py-4 text-center">
+            {% if a.is_reviewed %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-800">Reviewed</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-800">Pending</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-4 text-gray-600 text-xs max-w-xs truncate" title="{{ a.reviewer_notes }}">{{ a.reviewer_notes|default:"—" }}</td>
+          <td class="px-6 py-4 text-center">
+            <button onclick="openReviewModal('{{ a.id }}', '{{ a.symbol }}', '{{ a.metric }}', '{{ a.is_reviewed|yesno:'true,false' }}', '{{ a.reviewer_notes|escapejs }}')" class="text-xs text-navy hover:text-gold font-bold transition">Review</button>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="px-6 py-10 text-center text-gray-500">No anomalies found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Review Modal -->
+<div id="reviewModal" class="fixed inset-0 z-50 overflow-y-auto hidden">
+  <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+    <!-- Overlay -->
+    <div class="fixed inset-0 transition-opacity bg-black bg-opacity-50" onclick="closeReviewModal()"></div>
+    
+    <!-- Modal panel -->
+    <div class="inline-block align-middle bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+      <form id="reviewForm" method="post" action="">
+        {% csrf_token %}
+        <div class="bg-white px-6 py-6 border-b border-gray-150">
+          <h3 class="text-lg font-bold text-navy mb-1" id="modalTitle">Review Anomaly</h3>
+          <p class="text-xs text-gray-500" id="modalSubtitle">Update anomaly flags and reviewer log notes.</p>
+        </div>
+        
+        <div class="p-6 space-y-4">
+          <div class="flex items-center">
+            <input type="checkbox" name="is_reviewed" id="is_reviewed" class="h-4 w-4 text-navy border-gray-300 rounded focus:ring-navy">
+            <label for="is_reviewed" class="ml-2 block text-sm font-semibold text-gray-700">Mark as Reviewed</label>
+          </div>
+          
+          <div>
+            <label for="reviewer_notes" class="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Reviewer Notes</label>
+            <textarea name="reviewer_notes" id="reviewer_notes" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-navy text-sm" placeholder="Add details, updates, or investigations about this metric anomaly..."></textarea>
+          </div>
+        </div>
+        
+        <div class="bg-gray-50 px-6 py-4 flex justify-end gap-2">
+          <button type="button" onclick="closeReviewModal()" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-semibold rounded text-sm hover:bg-gray-50 transition">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-navy text-white font-semibold rounded text-sm hover:bg-navy-light transition">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function openReviewModal(id, symbol, metric, isReviewed, notes) {
+    const modal = document.getElementById('reviewModal');
+    const form = document.getElementById('reviewForm');
+    const title = document.getElementById('modalTitle');
+    const subtitle = document.getElementById('modalSubtitle');
+    const checkbox = document.getElementById('is_reviewed');
+    const notesArea = document.getElementById('reviewer_notes');
+    
+    form.action = `/admin-insights/anomalies/${id}/review/`;
+    title.innerText = `Review Anomaly — ${symbol}`;
+    subtitle.innerText = `Anomaly on metric '${metric}'`;
+    checkbox.checked = (isReviewed === 'true');
+    notesArea.value = notes;
+    
+    modal.classList.remove('hidden');
+  }
+  
+  function closeReviewModal() {
+    document.getElementById('reviewModal').classList.add('hidden');
+  }
+</script>
+{% endblock %}

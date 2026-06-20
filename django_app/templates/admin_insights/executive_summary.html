@@ -1,0 +1,127 @@
+{% extends "admin_insights/admin_base.html" %}
+
+{% block admin_content %}
+<div class="mb-6 flex justify-between items-center">
+  <div>
+    <h1 class="text-2xl font-bold text-navy">Executive Summary</h1>
+    <p class="text-sm text-gray-500">Operational overview of the Nifty 100 Financial Intelligence platform.</p>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Companies Tracked</div>
+    <div class="text-3xl font-bold text-navy">{{ total_companies }}</div>
+    <div class="text-xs text-gray-500 mt-2">Nifty 100 universe</div>
+  </div>
+
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Average Health Score</div>
+    <div class="text-3xl font-bold text-navy">{{ avg_score }}</div>
+    <div class="text-xs text-gray-500 mt-2">Across all companies</div>
+  </div>
+
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Good+ Companies</div>
+    <div class="text-3xl font-bold text-green-600">{{ good_companies }}</div>
+    <div class="text-xs text-gray-500 mt-2">Score &ge; 70 (GOOD or EXCELLENT)</div>
+  </div>
+
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+    <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Sectors</div>
+    <div class="text-3xl font-bold text-navy">{{ total_sectors }}</div>
+    <div class="text-xs text-gray-500 mt-2">Unique industry classifications</div>
+  </div>
+</div>
+
+<!-- Charts & Tables Section -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Sector Breakdown Donut Chart -->
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 lg:col-span-1 flex flex-col justify-between">
+    <div>
+      <h3 class="text-lg font-bold text-navy mb-4">Sectors</h3>
+      <p class="text-xs text-gray-500 mb-6">Distribution of companies across sectors.</p>
+    </div>
+    <div class="relative h-64 flex items-center justify-center">
+      <canvas id="sectorChart"></canvas>
+    </div>
+  </div>
+
+  <!-- System Health Details -->
+  <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+    <h3 class="text-lg font-bold text-navy mb-4">Platform Settings & Actions</h3>
+    <p class="text-sm text-gray-500 mb-6">Quick shortcuts to administer data operations and key services.</p>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="p-4 bg-gray-50 rounded-lg border border-gray-150">
+        <h4 class="font-bold text-navy text-sm mb-2">Automated Analysis Pipelines</h4>
+        <p class="text-xs text-gray-500 mb-4">Nightly Celery tasks compute ML scores and identify anomalies.</p>
+        <a href="{% url 'admin_insights:celery_monitor' %}" class="text-xs text-gold font-bold hover:underline">Configure Scheduled Tasks &rarr;</a>
+      </div>
+
+      <div class="p-4 bg-gray-50 rounded-lg border border-gray-150">
+        <h4 class="font-bold text-navy text-sm mb-2">Partner API Access Keys</h4>
+        <p class="text-xs text-gray-500 mb-4">Register channel developers, generate key-secret pairs, and update tiers.</p>
+        <a href="{% url 'admin_insights:api_management' %}" class="text-xs text-gold font-bold hover:underline">Manage Partner API Keys &rarr;</a>
+      </div>
+
+      <div class="p-4 bg-gray-50 rounded-lg border border-gray-150">
+        <h4 class="font-bold text-navy text-sm mb-2">Anomaly & Alert Center</h4>
+        <p class="text-xs text-gray-500 mb-4">Review mathematical outliers flagged by Z-Score or Isolation Forest models.</p>
+        <a href="{% url 'admin_insights:anomalies' %}" class="text-xs text-gold font-bold hover:underline">Review Anomalies &rarr;</a>
+      </div>
+
+      <div class="p-4 bg-gray-50 rounded-lg border border-gray-150">
+        <h4 class="font-bold text-navy text-sm mb-2">Bulk CSV Upload</h4>
+        <p class="text-xs text-gray-500 mb-4">Upload and refresh financial metrics directly from clean spreadsheets.</p>
+        <a href="{% url 'admin_insights:bulk_import' %}" class="text-xs text-gold font-bold hover:underline">Upload Metrics CSV &rarr;</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const ctx = document.getElementById('sectorChart').getContext('2d');
+    
+    // Generate harmonious colors for sectors
+    const labels = {{ chart_labels|safe }};
+    const data = {{ chart_data|safe }};
+    
+    const colors = [
+      '#1B2A4A', '#243659', '#F5A623', '#FDB944', '#10B981',
+      '#EF4444', '#3B82F6', '#8B5CF6', '#EC4899', '#6B7280',
+      '#F59E0B', '#14B8A6', '#6366F1', '#A78BFA', '#F472B6'
+    ];
+    
+    // Fill remaining colors if needed
+    while (colors.length < labels.length) {
+      colors.push('#' + Math.floor(Math.random()*16777215).toString(16));
+    }
+    
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          backgroundColor: colors.slice(0, labels.length),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: false // Hide legend to save space
+          }
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}
