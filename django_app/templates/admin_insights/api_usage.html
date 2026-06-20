@@ -78,8 +78,8 @@
   document.addEventListener("DOMContentLoaded", function() {
     const ctx = document.getElementById('trafficChart').getContext('2d');
     
-    const labels = {{ daily_labels|safe }};
-    const data = {{ daily_data|safe }};
+    const labels = JSON.parse('{{ daily_labels_json|safe }}');
+    const data = JSON.parse('{{ daily_data_json|safe }}');
     
     new Chart(ctx, {
       type: 'line',

@@ -221,11 +221,8 @@ class FactProsCons(models.Model):
     id = models.AutoField(primary_key=True)
     symbol = models.CharField(max_length=20)
     is_pro = models.BooleanField()
-    category = models.CharField(max_length=100, null=True, blank=True)
     text = models.TextField(null=True, blank=True)
     source = models.CharField(max_length=20, default='MANUAL')  # MANUAL or ML
-    confidence = models.FloatField(null=True, blank=True)
-    generated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         managed = False

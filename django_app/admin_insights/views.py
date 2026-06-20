@@ -1,6 +1,7 @@
 import csv
 import io
 import time
+import json
 from datetime import datetime, timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -50,6 +51,8 @@ def executive_summary(request):
         'total_sectors': total_sectors,
         'chart_labels': chart_labels,
         'chart_data': chart_data,
+        'chart_labels_json': json.dumps(chart_labels),
+        'chart_data_json': json.dumps(chart_data),
         'active_tab': 'executive_summary',
     }
     return render(request, 'admin_insights/executive_summary.html', context)
@@ -318,6 +321,8 @@ def api_usage(request):
     context = {
         'daily_labels': daily_labels,
         'daily_data': daily_data,
+        'daily_labels_json': json.dumps(daily_labels),
+        'daily_data_json': json.dumps(daily_data),
         'endpoint_stats': endpoint_stats,
         'p50': p50,
         'p95': p95,

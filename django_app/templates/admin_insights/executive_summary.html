@@ -88,8 +88,8 @@
     const ctx = document.getElementById('sectorChart').getContext('2d');
     
     // Generate harmonious colors for sectors
-    const labels = {{ chart_labels|safe }};
-    const data = {{ chart_data|safe }};
+    const labels = JSON.parse('{{ chart_labels_json|safe }}');
+    const data = JSON.parse('{{ chart_data_json|safe }}');
     
     const colors = [
       '#1B2A4A', '#243659', '#F5A623', '#FDB944', '#10B981',

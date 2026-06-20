@@ -12,10 +12,10 @@
       theme: {
         extend: {
           colors: {
-            navy:       "#1B2A4A",
+            navy:         "#1B2A4A",
             "navy-light": "#243659",
             "navy-dark":  "#121D33",
-            gold:       "#F5A623",
+            gold:         "#F5A623",
             "gold-light": "#FDB944",
           },
           fontFamily: {
@@ -31,13 +31,36 @@
 
   <style>
     body { background-color: #F8F9FA; }
-    .health-excellent { background: #d1fae5; color: #065f46; }
-    .health-good      { background: #dcfce7; color: #166534; }
-    .health-average   { background: #fef9c3; color: #854d0e; }
-    .health-weak      { background: #ffedd5; color: #9a3412; }
-    .health-poor      { background: #fee2e2; color: #991b1b; }
-    .health-unknown   { background: #f3f4f6; color: #6b7280; }
-    .sidebar-active   { background-color: #1B2A4A; color: #F5A623; }
+
+    /* Health label badge colours */
+    .health-excellent { background:#d1fae5; color:#065f46; }
+    .health-good      { background:#dcfce7; color:#166534; }
+    .health-average   { background:#fef9c3; color:#854d0e; }
+    .health-weak      { background:#ffedd5; color:#9a3412; }
+    .health-poor      { background:#fee2e2; color:#991b1b; }
+    .health-unknown   { background:#f3f4f6; color:#6b7280; }
+
+    /* Sidebar active state */
+    .sidebar-active   { background-color:#1B2A4A; color:#F5A623; }
+
+    /* Shared table / card classes used by older templates */
+    .card  { background:#fff; border-radius:.75rem; box-shadow:0 1px 3px rgba(0,0,0,.07); border:1px solid #f0f0f0; padding:1.25rem; }
+    .fin-table { width:100%; text-align:left; border-collapse:collapse; font-size:.8rem; }
+    .fin-table thead tr { background:#f8f9fa; border-bottom:1px solid #e5e7eb; }
+    .fin-table th { padding:.5rem .75rem; font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.04em; font-size:.7rem; }
+    .fin-table td { padding:.5rem .75rem; border-bottom:1px solid #f3f4f6; }
+    .fin-table .num { text-align:right; }
+    .fin-table tbody tr:hover { background:#f9fafb; }
+
+    .kpi-card  { background:#fff; border-radius:.75rem; border:1px solid #f0f0f0; padding:1rem 1.25rem; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+    .kpi-value { font-size:1.75rem; font-weight:700; color:#1B2A4A; }
+    .kpi-label { font-size:.7rem; color:#9ca3af; text-transform:uppercase; letter-spacing:.05em; margin-top:.2rem; }
+
+    .page-header { margin-bottom:1.5rem; }
+    .page-header h1 { font-size:1.5rem; font-weight:700; color:#1B2A4A; }
+    .page-header p  { font-size:.875rem; color:#6b7280; margin-top:.25rem; }
+
+    .chart-container { position:relative; height:240px; }
   </style>
 
   {% block extra_head %}{% endblock %}
@@ -48,13 +71,11 @@
   <!-- ── Navbar ──────────────────────────────────────────────────────────── -->
   <nav class="fixed top-0 left-0 right-0 z-50 h-14 bg-navy flex items-center px-4 shadow-md">
 
-    <!-- Logo -->
     <a href="/" class="flex items-center gap-2 mr-6 no-underline">
       <span class="w-8 h-8 bg-gold rounded font-bold text-navy flex items-center justify-center text-sm">B</span>
       <span class="text-white font-semibold text-base hidden sm:block">B100 Intelligence</span>
     </a>
 
-    <!-- Search -->
     <form action="/companies/" method="get" class="flex-1 max-w-md mr-4">
       <input
         type="text"
@@ -65,7 +86,6 @@
       />
     </form>
 
-    <!-- Nav links -->
     <div class="flex items-center gap-4 ml-auto text-sm">
       <a href="/companies/" class="text-gray-300 hover:text-gold transition">Companies</a>
       <a href="/screener/"  class="text-gray-300 hover:text-gold transition">Screener</a>
@@ -84,23 +104,26 @@
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
         Dashboard
       </a>
-      <a href="/companies/"  class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 {% if path == '/companies/' %}sidebar-active{% else %}text-gray-700{% endif %}">
+      <a href="/companies/"  class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 {% if '/companies/' in path %}sidebar-active{% else %}text-gray-700{% endif %}">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
         Companies
       </a>
-      <a href="/screener/"   class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 {% if path == '/screener/' %}sidebar-active{% else %}text-gray-700{% endif %}">
+      <a href="/screener/"   class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 {% if '/screener/' in path %}sidebar-active{% else %}text-gray-700{% endif %}">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
         Screener
       </a>
-      <a href="/compare/"    class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 {% if path == '/compare/' %}sidebar-active{% else %}text-gray-700{% endif %}">
+      <a href="/compare/"    class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 {% if '/compare/' in path %}sidebar-active{% else %}text-gray-700{% endif %}">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Compare
+      </a>
+      <a href="/health-scores/" class="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-gray-50 {% if '/health-scores/' in path %}sidebar-active{% else %}text-gray-700{% endif %}">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Health Scores
       </a>
       {% endwith %}
       {% endblock %}
     </nav>
 
-    <!-- Sidebar footer -->
     <div class="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
       <div class="font-medium text-gray-500">B100 Intelligence v1.0</div>
       <div>92 Companies · Nifty 100</div>
@@ -119,6 +142,43 @@
     <span>B100 Intelligence Platform &mdash; Bluestock Fintech Internship Project</span>
     <span>Data as of: {% now "N j, Y" %}. For educational purposes only. Not financial advice.</span>
   </footer>
+
+  <!-- ── Global JS helpers used across all templates ────────────────────── -->
+  <script>
+    /**
+     * Returns the CSS class string for a health label badge.
+     * Used by: screener.html, compare.html, sector_detail.html, health_score.html
+     */
+    function healthBadgeClass(label) {
+      const map = {
+        EXCELLENT: 'health-excellent',
+        GOOD:      'health-good',
+        AVERAGE:   'health-average',
+        WEAK:      'health-weak',
+        POOR:      'health-poor',
+      };
+      return (map[(label || '').toUpperCase()] || 'health-unknown') +
+             ' inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold';
+    }
+
+    /**
+     * Format a number as Indian Crore with comma separators.
+     * e.g. 123456.78 → "1,23,456.78"
+     */
+    function fmtCr(v) {
+      if (v == null || v === '' || isNaN(parseFloat(v))) return '—';
+      return parseFloat(v).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    }
+
+    /**
+     * Format a number as a percentage string.
+     * e.g. 12.345 → "12.35%"
+     */
+    function fmtPct(v) {
+      if (v == null || v === '' || isNaN(parseFloat(v))) return '—';
+      return parseFloat(v).toFixed(2) + '%';
+    }
+  </script>
 
   {% block extra_js %}{% endblock %}
 </body>

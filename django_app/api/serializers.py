@@ -13,6 +13,7 @@ from companies.models import (
 
 
 class NanSafeFloatField(serializers.FloatField):
+    """FloatField that converts NaN / Inf to None instead of crashing."""
     def to_representation(self, value):
         if value is None or (isinstance(value, float) and (math.isnan(value) or math.isinf(value))):
             return None
@@ -118,7 +119,7 @@ class MLScoreSerializer(serializers.ModelSerializer):
 class ProsConsSerializer(serializers.ModelSerializer):
     class Meta:
         model = FactProsCons
-        fields = ['is_pro', 'category', 'text', 'source', 'confidence']
+        fields = ['is_pro', 'text', 'source']
 
 
 class DocumentSerializer(serializers.ModelSerializer):

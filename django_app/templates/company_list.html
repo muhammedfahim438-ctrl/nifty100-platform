@@ -68,36 +68,35 @@
 let allCompanies = [];
 let scoreMap     = {};
 
-// ── Fetch companies and scores in parallel ────────────────────────────────
+// Fetch companies and scores in parallel
 Promise.all([
   fetch('/api/v1/companies/').then(r => r.json()),
   fetch('/api/v1/scores/').then(r => r.json()),
-]).then(([companies, scores]) => {
-  allCompanies = Array.isArray(companies) ? companies : [];
+]).then(([companiesData, scoresData]) => {
+  // Both endpoints return {count, results}
+  allCompanies = companiesData.results || (Array.isArray(companiesData) ? companiesData : []);
+  const scoreList = scoresData.results || (Array.isArray(scoresData) ? scoresData : []);
 
-  // Build score lookup: symbol → {score, label}
-  if (Array.isArray(scores)) {
-    scores.forEach(s => {
-      scoreMap[s.symbol] = {
-        score: parseFloat(s.overall_score),
-        label: s.health_label || 'UNKNOWN',
-      };
-    });
-  }
+  scoreList.forEach(s => {
+    scoreMap[s.symbol] = {
+      score: parseFloat(s.overall_score),
+      label: s.health_label || 'UNKNOWN',
+    };
+  });
 
-  // Apply search param from URL if present
+  // Pre-fill search from URL
   const params = new URLSearchParams(window.location.search);
   if (params.get('search')) {
     document.getElementById('filter-search').value = params.get('search');
   }
 
   render();
-}).catch(() => {
+}).catch(err => {
+  console.error(err);
   document.getElementById('company-table-wrap').innerHTML =
-    '<div class="text-center py-16 text-red-400">Could not load company data.</div>';
+    '<div class="text-center py-16 text-red-400">Could not load company data. Is the server running?</div>';
 });
 
-// ── Render table ───────────────────────────────────────────────────────────
 function render() {
   const search = document.getElementById('filter-search').value.toLowerCase();
   const sector = document.getElementById('filter-sector').value;
@@ -106,8 +105,8 @@ function render() {
 
   let rows = allCompanies.filter(c => {
     if (search && !c.symbol.toLowerCase().includes(search) &&
-        !(c.company_name||'').toLowerCase().includes(search)) return false;
-    if (sector && (c.sector_name||'').toLowerCase() !== sector.toLowerCase()) return false;
+        !(c.company_name || '').toLowerCase().includes(search)) return false;
+    if (sector && (c.sector_name || '').toLowerCase() !== sector.toLowerCase()) return false;
     if (label) {
       const sl = (scoreMap[c.symbol]?.label || '').toUpperCase();
       if (sl !== label) return false;
@@ -115,12 +114,11 @@ function render() {
     return true;
   });
 
-  // Sort
   rows.sort((a, b) => {
     if (sort === 'score') {
       return (scoreMap[b.symbol]?.score || 0) - (scoreMap[a.symbol]?.score || 0);
     } else if (sort === 'roe') {
-      return (parseFloat(b.roe_pct) || 0) - (parseFloat(a.roe_pct) || 0);
+      return (parseFloat(b.roe_percentage) || 0) - (parseFloat(a.roe_percentage) || 0);
     } else {
       return a.symbol.localeCompare(b.symbol);
     }
@@ -139,8 +137,9 @@ function render() {
     const score = isNaN(sm.score) ? '—' : sm.score.toFixed(1);
     const lbl   = sm.label || 'UNKNOWN';
     const cls   = 'health-' + lbl.toLowerCase();
-    const roe   = c.roe_pct  ? parseFloat(c.roe_pct).toFixed(1)  + '%' : '—';
-    const roce  = c.roce_pct ? parseFloat(c.roce_pct).toFixed(1) + '%' : '—';
+    const roe   = c.roe_percentage  ? parseFloat(c.roe_percentage).toFixed(1)  + '%' : '—';
+    const roce  = c.roce_percentage ? parseFloat(c.roce_percentage).toFixed(1) + '%' : '—';
+    const pct   = Math.min(parseFloat(sm.score) || 0, 100);
     return `<tr class="border-b border-gray-50 hover:bg-blue-50 cursor-pointer transition"
                 onclick="location.href='/company/${c.symbol}/'">
       <td class="py-3 px-4 font-bold text-navy text-sm">${c.symbol}</td>
@@ -149,7 +148,7 @@ function render() {
       <td class="py-3 px-4">
         <div class="flex items-center gap-2">
           <div class="w-16 bg-gray-100 rounded-full h-1.5">
-            <div class="h-1.5 rounded-full bg-navy" style="width:${Math.min(parseFloat(sm.score)||0,100)}%"></div>
+            <div class="h-1.5 rounded-full bg-navy" style="width:${pct}%"></div>
           </div>
           <span class="text-sm font-semibold">${score}</span>
         </div>
@@ -185,8 +184,7 @@ function resetFilters() {
   render();
 }
 
-// Live filter on input
-['filter-search','filter-sector','filter-label','filter-sort'].forEach(id => {
+['filter-search', 'filter-sector', 'filter-label', 'filter-sort'].forEach(id => {
   document.getElementById(id).addEventListener('input', render);
   document.getElementById(id).addEventListener('change', render);
 });

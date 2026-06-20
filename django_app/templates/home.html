@@ -17,7 +17,7 @@
     </button>
   </form>
 
-  <!-- Featured companies -->
+  <!-- Featured companies (server-rendered) -->
   <div class="flex flex-wrap gap-2">
     <span class="text-xs text-gray-400 self-center mr-1">Quick look:</span>
     {% for sym in featured %}
@@ -29,7 +29,7 @@
   </div>
 </div>
 
-<!-- ── KPI cards (populated via JS) ──────────────────────────────────────── -->
+<!-- ── KPI cards ──────────────────────────────────────────────────────────── -->
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
     <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Companies Tracked</div>
@@ -59,7 +59,7 @@
     </div>
   </div>
 
-  <!-- Sectors -->
+  <!-- Sectors (server-rendered) -->
   <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
     <h2 class="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Sectors</h2>
     <div class="space-y-1.5 max-h-96 overflow-y-auto">
@@ -71,6 +71,8 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
         </svg>
       </a>
+      {% empty %}
+      <p class="text-sm text-gray-400 px-3 py-2">No sectors found.</p>
       {% endfor %}
     </div>
   </div>
@@ -80,37 +82,43 @@
 
 {% block extra_js %}
 <script>
-  // ── Load KPI cards and top 10 table ────────────────────────────────────────
+  // Fetch scores — API returns {count, results: [...]}
   fetch('/api/v1/scores/')
     .then(r => r.json())
     .then(data => {
-      if (!Array.isArray(data) || data.length === 0) return;
+      // Unwrap paginated response
+      const scoreList = data.results || (Array.isArray(data) ? data : []);
+      if (!scoreList.length) return;
 
-      // Avg score
-      const scores  = data.map(d => parseFloat(d.overall_score)).filter(s => !isNaN(s));
-      const avg     = scores.reduce((a, b) => a + b, 0) / scores.length;
+      // Sort by overall_score descending (API already does this, but be safe)
+      scoreList.sort((a, b) => (parseFloat(b.overall_score) || 0) - (parseFloat(a.overall_score) || 0));
+
+      // KPI: avg score
+      const scores = scoreList.map(d => parseFloat(d.overall_score)).filter(s => !isNaN(s));
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
       document.getElementById('kpi-avg-score').textContent = avg.toFixed(1);
 
-      // GOOD+ count
-      const goodPlus = data.filter(d => ['EXCELLENT','GOOD'].includes(d.health_label)).length;
+      // KPI: GOOD+ count
+      const goodPlus = scoreList.filter(d => ['EXCELLENT', 'GOOD'].includes(d.health_label)).length;
       document.getElementById('kpi-good-count').textContent = goodPlus;
 
       // Top 10 table
-      const top10 = data.slice(0, 10);
-      const rows  = top10.map((d, i) => {
-        const label  = d.health_label || 'UNKNOWN';
-        const cls    = 'health-' + label.toLowerCase();
-        const score  = parseFloat(d.overall_score);
+      const top10 = scoreList.slice(0, 10);
+      const rows = top10.map((d, i) => {
+        const label = d.health_label || 'UNKNOWN';
+        const cls   = 'health-' + label.toLowerCase();
+        const score = parseFloat(d.overall_score);
+        const pct   = Math.min(isNaN(score) ? 0 : score, 100);
         return `<tr class="border-b border-gray-50 hover:bg-gray-50 cursor-pointer" onclick="location.href='/company/${d.symbol}/'">
-          <td class="py-2 px-3 text-xs text-gray-400">${i+1}</td>
+          <td class="py-2 px-3 text-xs text-gray-400">${i + 1}</td>
           <td class="py-2 px-3 font-semibold text-navy text-sm">${d.symbol}</td>
           <td class="py-2 px-3 text-sm text-gray-700 max-w-xs truncate">${d.company_name || ''}</td>
           <td class="py-2 px-3">
             <div class="flex items-center gap-2">
               <div class="w-20 bg-gray-100 rounded-full h-1.5">
-                <div class="h-1.5 rounded-full bg-navy" style="width:${Math.min(score,100)}%"></div>
+                <div class="h-1.5 rounded-full bg-navy" style="width:${pct}%"></div>
               </div>
-              <span class="text-sm font-medium">${isNaN(score)?'—':score.toFixed(1)}</span>
+              <span class="text-sm font-medium">${isNaN(score) ? '—' : score.toFixed(1)}</span>
             </div>
           </td>
           <td class="py-2 px-3"><span class="text-xs px-2 py-0.5 rounded-full font-medium ${cls}">${label}</span></td>
@@ -129,9 +137,10 @@
           <tbody>${rows}</tbody>
         </table>`;
     })
-    .catch(() => {
+    .catch(err => {
+      console.error('Score fetch failed:', err);
       document.getElementById('top10-table').innerHTML =
-        '<div class="text-red-400 text-sm py-4 text-center">Could not load data.</div>';
+        '<div class="text-red-400 text-sm py-4 text-center">Could not load data. Is the API server running?</div>';
     });
 </script>
 {% endblock %}
