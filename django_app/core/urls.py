@@ -1,12 +1,31 @@
 """
-Root URL routing for the B100 Intelligence Platform.
+B100 Intelligence — Root URL Configuration
 """
-
 from django.contrib import admin
 from django.urls import path, include
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 
 urlpatterns = [
-    path("admin/",    admin.site.urls),
-    path("",          include("companies.urls")),   # HTML template pages
-    path("api/v1/",   include("api.urls")),         # REST API
+    # Django built-in admin
+    path('django-admin/', admin.site.urls),
+
+    # Public website pages (Django templates)
+    path('', include('dashboard.urls')),
+
+    # Public REST API v1
+    path('api/v1/', include('api.urls')),
+
+    # Channel Partner API
+    path('api/partner/v1/', include('api_management.partner_urls')),
+
+    # Accounts (login/logout)
+    path('accounts/', include('accounts.urls')),
+
+    # Admin Insights Dashboard (we'll build this in the next step)
+    # path('admin-insights/', include('accounts.admin_urls')),
+
+    # API Documentation
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/v1/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/v1/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]

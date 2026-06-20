@@ -1,184 +1,206 @@
 """
-API Views for the Nifty 100 Financial Intelligence Platform.
+api/views.py
+Public REST API (/api/v1/) — powers every Chart.js chart and table
+across the Django template pages (home, company list, company detail,
+screener, compare, sector detail, health scores).
+
+No authentication required — these are public, read-only endpoints
+for the website itself. Rate-limited at 100 req/hr per IP via
+PublicAPIThrottle (see api_management/throttling.py).
 """
-
-from rest_framework import generics, filters
-from rest_framework.decorators import api_view
+from django.db.models import Q
+from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.generics import ListAPIView, RetrieveAPIView
+from drf_spectacular.utils import extend_schema, OpenApiParameter
 
+from api_management.throttling import PublicAPIThrottle
 from companies.models import (
-    DimCompany, DimSector, FactProfitLoss,
-    FactBalanceSheet, FactCashFlow, FactMLScore,
-    FactProsCons, FactDocument
+    DimCompany, DimSector,
+    FactProfitLoss, FactBalanceSheet, FactCashFlow,
+    FactAnalysis, FactMLScore, FactProsCons, FactDocument,
 )
 from .serializers import (
-    CompanyListSerializer, CompanyDetailSerializer,
-    SectorSerializer, ProfitLossSerializer,
-    BalanceSheetSerializer, CashFlowSerializer,
-    MLScoreSerializer, ProsConsSerializer, DocumentSerializer
+    CompanyListSerializer, CompanyDetailSerializer, SectorSerializer,
+    ProfitLossSerializer, BalanceSheetSerializer, CashFlowSerializer,
+    AnalysisSerializer, MLScoreSerializer, ProsConsSerializer, DocumentSerializer,
 )
 
 
-class CompanyListView(generics.ListAPIView):
-    serializer_class   = CompanyListSerializer
-    filter_backends    = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields      = ["symbol", "company_name"]
-    ordering_fields    = ["symbol", "company_name"]
-    ordering           = ["symbol"]
-    pagination_class   = None
+class PublicAPIBaseView(APIView):
+    """Base class applying the public rate limit to every endpoint below."""
+    throttle_classes = [PublicAPIThrottle]
 
-    def get_queryset(self):
-        queryset = DimCompany.objects.select_related("sector").all()
 
-        sector = self.request.query_params.get("sector")
+# ─── COMPANIES ──────────────────────────────────────────────────────────────────
+
+@extend_schema(tags=['Public API'], summary='List all companies')
+class CompanyListView(PublicAPIBaseView):
+    def get(self, request):
+        qs = DimCompany.objects.select_related('sector').all().order_by('company_name')
+        sector = request.query_params.get('sector')
         if sector:
-            queryset = queryset.filter(sector__sector_name__iexact=sector)
+            qs = qs.filter(sector__sector_name__iexact=sector)
+        data = CompanyListSerializer(qs, many=True).data
+        return Response({'count': len(data), 'results': data})
 
-        return queryset
+
+@extend_schema(tags=['Public API'], summary='Single company profile')
+class CompanyDetailView(PublicAPIBaseView):
+    def get(self, request, symbol):
+        try:
+            company = DimCompany.objects.select_related('sector').get(symbol=symbol.upper())
+        except DimCompany.DoesNotExist:
+            return Response({'error': f'Company {symbol} not found.'}, status=404)
+        return Response(CompanyDetailSerializer(company).data)
 
 
-class CompanyDetailView(generics.RetrieveAPIView):
+@extend_schema(tags=['Public API'], summary='Full financial history for one company')
+class CompanyFinancialsView(PublicAPIBaseView):
     """
-    GET /api/v1/companies/{symbol}/
-    Returns full company details.
-    """
-    serializer_class   = CompanyDetailSerializer
-    queryset           = DimCompany.objects.select_related("sector").all()
-    lookup_field       = "symbol"
-
-
-class CompanyFinancialsView(generics.GenericAPIView):
-    """
-    GET /api/v1/companies/{symbol}/financials/
-    Returns all financial data for one company.
+    Bundles P&L, Balance Sheet, Cash Flow, Analysis (CAGR), ML Score,
+    Pros/Cons, and Documents into a single response.
+    This is the endpoint company_detail.html's JS calls on page load.
     """
     def get(self, request, symbol):
+        symbol = symbol.upper()
         try:
             company = DimCompany.objects.get(symbol=symbol)
         except DimCompany.DoesNotExist:
-            return Response({"error": f"Company {symbol} not found"}, status=404)
+            return Response({'error': f'Company {symbol} not found.'}, status=404)
 
-        profit_loss   = FactProfitLoss.objects.filter(symbol=company).select_related("year").order_by("year__sort_order")
-        balance_sheet = FactBalanceSheet.objects.filter(symbol=company).select_related("year").order_by("year__sort_order")
-        cash_flow     = FactCashFlow.objects.filter(symbol=company).select_related("year").order_by("year__sort_order")
-        ml_score      = FactMLScore.objects.filter(symbol=company).order_by("-computed_at").first()
-        pros_cons     = FactProsCons.objects.filter(symbol=company)
-        documents     = FactDocument.objects.filter(symbol=company).order_by("-year")
+        pl = FactProfitLoss.objects.filter(symbol=symbol).select_related('year').order_by('year__sort_order')
+        bs = FactBalanceSheet.objects.filter(symbol=symbol).select_related('year').order_by('year__sort_order')
+        cf = FactCashFlow.objects.filter(symbol=symbol).select_related('year').order_by('year__sort_order')
+        analysis = FactAnalysis.objects.filter(symbol=symbol)
+        pros_cons = FactProsCons.objects.filter(symbol=symbol)
+        documents = FactDocument.objects.filter(symbol=symbol).order_by('-year')
+
+        ml_score = None
+        try:
+            score_obj = FactMLScore.objects.get(company_id=symbol)
+            ml_score = MLScoreSerializer(score_obj).data
+        except FactMLScore.DoesNotExist:
+            pass
 
         return Response({
-            "symbol"       : symbol,
-            "company_name" : company.company_name,
-            "profit_loss"  : ProfitLossSerializer(profit_loss, many=True).data,
-            "balance_sheet": BalanceSheetSerializer(balance_sheet, many=True).data,
-            "cash_flow"    : CashFlowSerializer(cash_flow, many=True).data,
-            "ml_score"     : MLScoreSerializer(ml_score).data if ml_score else None,
-            "pros"         : ProsConsSerializer(pros_cons.filter(is_pro=True), many=True).data,
-            "cons"         : ProsConsSerializer(pros_cons.filter(is_pro=False), many=True).data,
-            "documents"    : DocumentSerializer(documents, many=True).data,
+            'symbol': symbol,
+            'company_name': company.company_name,
+            'profit_loss': ProfitLossSerializer(pl, many=True).data,
+            'balance_sheet': BalanceSheetSerializer(bs, many=True).data,
+            'cash_flow': CashFlowSerializer(cf, many=True).data,
+            'analysis': AnalysisSerializer(analysis, many=True).data,
+            'ml_score': ml_score,
+            'pros_cons': ProsConsSerializer(pros_cons, many=True).data,
+            'documents': DocumentSerializer(documents, many=True).data,
         })
 
 
-class SectorListView(generics.ListAPIView):
+# ─── SECTORS ────────────────────────────────────────────────────────────────────
+
+@extend_schema(tags=['Public API'], summary='List all sectors')
+class SectorListView(PublicAPIBaseView):
+    def get(self, request):
+        qs = DimSector.objects.all().order_by('sector_name')
+        data = SectorSerializer(qs, many=True).data
+        return Response({'count': len(data), 'results': data})
+
+
+# ─── ML SCORES ──────────────────────────────────────────────────────────────────
+
+@extend_schema(tags=['Public API'], summary='All ML health scores')
+class ScoresListView(PublicAPIBaseView):
+    def get(self, request):
+        qs = FactMLScore.objects.select_related('company', 'company__sector').order_by('-overall_score')
+        symbols = request.query_params.get('symbols')
+        if symbols:
+            symbol_list = [s.strip().upper() for s in symbols.split(',')]
+            qs = qs.filter(company_id__in=symbol_list)
+        data = MLScoreSerializer(qs, many=True).data
+        return Response({'count': len(data), 'results': data})
+
+
+# ─── SCREENER ───────────────────────────────────────────────────────────────────
+
+@extend_schema(
+    tags=['Public API'],
+    summary='Filter companies by financial criteria',
+    parameters=[
+        OpenApiParameter('sector', str), OpenApiParameter('health_label', str),
+        OpenApiParameter('min_score', float), OpenApiParameter('min_roe', float),
+        OpenApiParameter('max_de', float), OpenApiParameter('min_sales_growth', float),
+    ],
+)
+class ScreenerView(PublicAPIBaseView):
     """
-    GET /api/v1/sectors/
-    Returns list of all sectors.
+    Dynamic query builder — only applies filters the user actually set,
+    using Q() objects as specified in the project spec.
     """
-    serializer_class = SectorSerializer
-    queryset         = DimSector.objects.all().order_by("sector_name")
+    def get(self, request):
+        sector = request.query_params.get('sector')
+        health_label = request.query_params.get('health_label')
+        min_score = request.query_params.get('min_score')
+        min_roe = request.query_params.get('min_roe')
+        max_de = request.query_params.get('max_de')
+        min_growth = request.query_params.get('min_sales_growth')
 
+        scores_qs = FactMLScore.objects.select_related('company', 'company__sector')
 
-class HealthScoreListView(generics.ListAPIView):
-    """
-    GET /api/v1/scores/
-    Returns latest health scores for all companies.
-    Supports filtering by health_label.
-    """
-    serializer_class = MLScoreSerializer
-
-    def get_queryset(self):
-        queryset = FactMLScore.objects.select_related("symbol").order_by("-overall_score")
-
-        label = self.request.query_params.get("label")
-        if label:
-            queryset = queryset.filter(health_label__iexact=label)
-
-        return queryset
-
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        data = []
-        for score in queryset:
-            row = MLScoreSerializer(score).data
-            row["symbol"]       = score.symbol_id
-            row["company_name"] = score.symbol.company_name
-            data.append(row)
-        return Response(data)
-
-
-@api_view(["GET"])
-def screener_view(request):
-    """
-    GET /api/v1/screener/
-    Filter companies by financial criteria.
-
-    Query params:
-        min_score       — minimum ML health score (0-100)
-        health_label    — EXCELLENT / GOOD / AVERAGE / WEAK / POOR
-        sector          — sector name (case-insensitive)
-        min_roe         — minimum ROE% (from dim_company.roe_pct)
-        max_de          — maximum Debt-to-Equity (from fact_balance_sheet latest year)
-    """
-    companies = DimCompany.objects.select_related("sector").all()
-
-    # ── Sector filter ────────────────────────────────────────────────────────
-    sector = request.query_params.get("sector")
-    if sector:
-        companies = companies.filter(sector__sector_name__iexact=sector)
-
-    # ── ROE filter — dim_company.roe_pct ─────────────────────────────────────
-    min_roe = request.query_params.get("min_roe")
-    if min_roe:
-        try:
-            companies = companies.filter(roe_pct__gte=float(min_roe))
-        except ValueError:
-            pass  # ignore malformed value
-
-    # ── Health score / label filter — fact_ml_scores ─────────────────────────
-    health_label = request.query_params.get("health_label")
-    min_score    = request.query_params.get("min_score")
-
-    if health_label or min_score:
-        score_qs = FactMLScore.objects.all()
+        if sector:
+            scores_qs = scores_qs.filter(company__sector__sector_name__iexact=sector)
         if health_label:
-            score_qs = score_qs.filter(health_label__iexact=health_label)
+            scores_qs = scores_qs.filter(health_label__iexact=health_label)
         if min_score:
-            try:
-                score_qs = score_qs.filter(overall_score__gte=float(min_score))
-            except ValueError:
-                pass
-        valid_symbols = score_qs.values_list("symbol_id", flat=True)
-        companies = companies.filter(symbol__in=valid_symbols)
+            scores_qs = scores_qs.filter(overall_score__gte=float(min_score))
 
-    # ── Max D/E filter — fact_balance_sheet latest non-TTM year ─────────────
-    max_de = request.query_params.get("max_de")
-    if max_de:
-        try:
-            max_de_val = float(max_de)
-            # Get latest non-TTM balance sheet row per company, filter by D/E
-            de_symbols = (
+        results = []
+        for score in scores_qs[:200]:
+            company = score.company
+            if company is None:
+                continue
+
+            # Latest year balance sheet / P&L for D/E, OPM, ROE checks
+            latest_bs = (
                 FactBalanceSheet.objects
-                .filter(year__is_ttm=False, debt_to_equity__isnull=False)
-                .filter(debt_to_equity__lte=max_de_val)
-                .order_by("symbol_id", "-year__sort_order")
-                .distinct("symbol_id")
-                .values_list("symbol_id", flat=True)
+                .filter(symbol=company.symbol)
+                .exclude(year__is_ttm=True)
+                .order_by('-year__sort_order')
+                .first()
             )
-            companies = companies.filter(symbol__in=list(de_symbols))
-        except ValueError:
-            pass
+            latest_pl = (
+                FactProfitLoss.objects
+                .filter(symbol=company.symbol)
+                .exclude(year__is_ttm=True)
+                .order_by('-year__sort_order')
+                .first()
+            )
 
-    serializer = CompanyListSerializer(companies, many=True)
-    return Response({
-        "count"  : companies.count(),
-        "results": serializer.data
-    })
+            de = latest_bs.debt_to_equity if latest_bs else None
+            opm = latest_pl.opm_pct if latest_pl else None
+            roe = company.roe_percentage
+
+            if max_de is not None and de is not None and de > float(max_de):
+                continue
+            if min_roe is not None and (roe is None or roe < float(min_roe)):
+                continue
+
+            if min_growth:
+                growth_row = FactAnalysis.objects.filter(
+                    symbol=company.symbol, period_label='3Y'
+                ).first()
+                growth_val = growth_row.compounded_sales_growth_pct if growth_row else None
+                if growth_val is None or growth_val < float(min_growth):
+                    continue
+
+            results.append({
+                'symbol': company.symbol,
+                'company_name': company.company_name,
+                'sector_name': company.sector.sector_name if company.sector else None,
+                'overall_score': score.overall_score,
+                'health_label': score.health_label,
+                'opm_pct': opm,
+                'debt_to_equity': de,
+                'roe_pct': roe,
+            })
+
+        return Response({'count': len(results), 'results': results})

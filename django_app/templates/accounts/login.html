@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Staff Login — B100 Intelligence</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'DM Sans', sans-serif; background: #0F1B2D; }
+    .bg-pattern {
+      background-image: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0);
+      background-size: 24px 24px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center bg-pattern">
+
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3" style="background:#F5A623">
+        <span class="text-white font-black text-lg">B</span>
+      </div>
+      <h1 class="text-white font-bold text-xl">B100 Intelligence</h1>
+      <p class="text-sm" style="color:rgba(255,255,255,.5)">Admin & Channel Partner Console</p>
+    </div>
+
+    <div class="bg-white rounded-2xl p-8 shadow-2xl">
+      <h2 class="font-bold text-lg mb-1" style="color:#1F4E79">Staff Sign In</h2>
+      <p class="text-xs text-gray-400 mb-6">Access restricted to authorized administrators</p>
+
+      {% if messages %}
+        {% for message in messages %}
+          <div class="mb-4 p-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      <form method="POST" action="{% url 'accounts:login' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.GET.next }}" />
+
+        <label class="text-xs font-medium text-gray-500 block mb-1.5">Username</label>
+        <input type="text" name="username" required autofocus
+          class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg mb-4 focus:outline-none focus:border-blue-400" />
+
+        <label class="text-xs font-medium text-gray-500 block mb-1.5">Password</label>
+        <input type="password" name="password" required
+          class="w-full px-4 py-2.5 text-sm border border-gray-200 rounded-lg mb-6 focus:outline-none focus:border-blue-400" />
+
+        <button type="submit"
+          class="w-full py-3 rounded-lg text-white font-semibold text-sm hover:opacity-90 transition-opacity"
+          style="background:#1F4E79">
+          Sign In
+        </button>
+      </form>
+    </div>
+
+    <p class="text-center text-xs mt-6" style="color:rgba(255,255,255,.4)">
+      <a href="{% url 'home' %}" class="hover:text-white">← Back to public site</a>
+    </p>
+  </div>
+
+</body>
+</html>

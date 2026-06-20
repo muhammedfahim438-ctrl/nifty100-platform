@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Security
 # ─────────────────────────────────────────────
 SECRET_KEY = config("SECRET_KEY")
-DEBUG = config("DEBUG", default=False, cast=bool)
+DEBUG = str(config("DEBUG", default="False")).strip().lower() in ("1", "true", "yes", "on")
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
 
 # ─────────────────────────────────────────────
@@ -35,10 +35,11 @@ INSTALLED_APPS = [
     "django_filters",
     # Our apps
     "companies",
-    "api",
-    "admin_insights",
-    "accounts",
+    "ml_engine",
     "api_management",
+    "dashboard",
+    "accounts",
+    "api",
 ]
 
 # ─────────────────────────────────────────────

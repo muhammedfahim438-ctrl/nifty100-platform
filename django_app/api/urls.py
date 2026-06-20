@@ -1,27 +1,18 @@
 """
-URL routing for the Nifty 100 API.
+api/urls.py — Public REST API routes
+Included from core/urls.py at: path('api/v1/', include('api.urls'))
 """
-
 from django.urls import path
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from . import views
+from .views import (
+    CompanyListView, CompanyDetailView, CompanyFinancialsView,
+    SectorListView, ScoresListView, ScreenerView,
+)
 
 urlpatterns = [
-    # Company endpoints
-    path("companies/",                          views.CompanyListView.as_view(),       name="company-list"),
-    path("companies/<str:symbol>/",             views.CompanyDetailView.as_view(),     name="company-detail"),
-    path("companies/<str:symbol>/financials/",  views.CompanyFinancialsView.as_view(), name="company-financials"),
-
-    # Sector endpoints
-    path("sectors/",                            views.SectorListView.as_view(),        name="sector-list"),
-
-    # Health scores
-    path("scores/",                             views.HealthScoreListView.as_view(),   name="health-scores"),
-
-    # Screener
-    path("screener/",                           views.screener_view,                   name="screener"),
-
-    # API Documentation
-    path("schema/",                             SpectacularAPIView.as_view(),          name="schema"),
-    path("docs/",                               SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path('companies/',                       CompanyListView.as_view(),        name='api-company-list'),
+    path('companies/<str:symbol>/',          CompanyDetailView.as_view(),      name='api-company-detail'),
+    path('companies/<str:symbol>/financials/', CompanyFinancialsView.as_view(), name='api-company-financials'),
+    path('sectors/',                         SectorListView.as_view(),         name='api-sector-list'),
+    path('scores/',                          ScoresListView.as_view(),         name='api-scores'),
+    path('screener/',                        ScreenerView.as_view(),           name='api-screener'),
 ]

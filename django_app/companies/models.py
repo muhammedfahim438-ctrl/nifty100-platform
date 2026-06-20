@@ -190,7 +190,6 @@ class FactAnalysis(models.Model):
 
 class FactMLScore(models.Model):
     id = models.AutoField(primary_key=True)
-    symbol = models.CharField(max_length=20)
     company = models.ForeignKey(
         DimCompany, on_delete=models.DO_NOTHING, db_column='symbol',
         to_field='symbol', related_name='ml_scores'
@@ -208,6 +207,11 @@ class FactMLScore(models.Model):
     class Meta:
         managed = False
         db_table = 'fact_ml_scores'
+
+    @property
+    def symbol(self):
+        """Convenience accessor — Django stores the raw FK value as company_id."""
+        return self.company_id
 
     def __str__(self):
         return f"{self.symbol} — {self.overall_score}"
