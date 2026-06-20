@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Compare Companies{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Compare Companies</h1>
+  <p>Side-by-side financial comparison of up to 4 companies</p>
+</div>
+
+<!-- Company selector -->
+<div class="card mb-6">
+  <div class="flex items-center gap-3 flex-wrap">
+    <div class="relative flex-1 min-w-48">
+      <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-gray-400"></i>
+      <input id="compare-search" placeholder="Type company name or symbol…"
+        class="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none"
+        oninput="searchCompanies(this.value)" autocomplete="off" />
+      <div id="search-dropdown" class="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 z-50 hidden max-h-48 overflow-y-auto"></div>
+    </div>
+    <div id="selected-chips" class="flex gap-2 flex-wrap"></div>
+  </div>
+</div>
+
+<!-- Comparison table -->
+<div class="card overflow-x-auto mb-6" id="compare-card" style="display:none">
+  <table class="fin-table" id="compare-table">
+    <thead><tr id="compare-header"></tr></thead>
+    <tbody id="compare-body"></tbody>
+  </table>
+</div>
+
+<!-- Revenue trend chart -->
+<div class="card" id="compare-chart-card" style="display:none">
+  <h3 class="font-bold text-navy mb-4">Revenue Trend Comparison (₹ Cr)</h3>
+  <div class="chart-container" style="height:300px"><canvas id="compareRevChart"></canvas></div>
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+const API = 'http://127.0.0.1:8000/api/v1';
+let allCompanies = [];
+let selectedSymbols = [];
+let compareChart = null;
+
+async function init() {
+  const res = await fetch(`${API}/companies/?page_size=100`);
+  const data = await res.json();
+  allCompanies = data.results || data;
+}
+
+function searchCompanies(q) {
+  const dd = document.getElementById('search-dropdown');
+  if (!q || q.length < 2) { dd.classList.add('hidden'); return; }
+  const matches = allCompanies.filter(c =>
+    c.company_name?.toLowerCase().includes(q.toLowerCase()) ||
+    c.symbol?.toLowerCase().includes(q.toLowerCase())
+  ).slice(0, 8);
+  if (!matches.length) { dd.classList.add('hidden'); return; }
+  dd.innerHTML = matches.map(c => `
+    <div class="px-4 py-2.5 text-sm hover:bg-gray-50 cursor-pointer flex justify-between"
+      onclick="addCompany('${c.symbol}', '${c.company_name?.replace(/'/g,"\\'")}')">
+      <span>${c.company_name}</span>
+      <span class="text-gray-400 font-mono text-xs">${c.symbol}</span>
+    </div>
+  `).join('');
+  dd.classList.remove('hidden');
+}
+
+function addCompany(symbol, name) {
+  if (selectedSymbols.includes(symbol) || selectedSymbols.length >= 4) return;
+  selectedSymbols.push(symbol);
+  document.getElementById('search-dropdown').classList.add('hidden');
+  document.getElementById('compare-search').value = '';
+  renderChips();
+  loadComparison();
+}
+
+function removeCompany(symbol) {
+  selectedSymbols = selectedSymbols.filter(s => s !== symbol);
+  renderChips();
+  loadComparison();
+}
+
+function renderChips() {
+  document.getElementById('selected-chips').innerHTML = selectedSymbols.map(s => `
+    <span class="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold text-white" style="background:var(--navy)">
+      ${s}
+      <button onclick="removeCompany('${s}')" class="ml-1 hover:opacity-70">×</button>
+    </span>
+  `).join('');
+}
+
+const METRICS = [
+  {key:'overall_score', label:'Health Score', fmt: v => v ? parseFloat(v).toFixed(1) : '—'},
+  {key:'health_label', label:'Health Label', fmt: v => v || '—'},
+  {key:'sector_name', label:'Sector', fmt: v => v || '—'},
+  {key:'latest_sales', label:'Latest Revenue (Cr)', fmt: fmtCr},
+  {key:'latest_profit', label:'Latest Net Profit (Cr)', fmt: fmtCr},
+  {key:'opm_pct', label:'OPM%', fmt: v => fmtPct(v)},
+  {key:'debt_to_equity', label:'D/E Ratio', fmt: v => v !== null ? parseFloat(v||0).toFixed(2) : '—'},
+  {key:'roe_pct', label:'ROE%', fmt: v => fmtPct(v)},
+];
+
+async function loadComparison() {
+  if (!selectedSymbols.length) {
+    document.getElementById('compare-card').style.display = 'none';
+    document.getElementById('compare-chart-card').style.display = 'none';
+    return;
+  }
+
+  const [coRes, scoreRes] = await Promise.all([
+    fetch(`${API}/companies/?page_size=100`),
+    fetch(`${API}/scores/`),
+  ]);
+  const companies = (await coRes.json()).results || await coRes.json();
+  const scores = await scoreRes.json();
+  const scoreMap = {};
+  (scores.results || scores).forEach(s => { scoreMap[s.symbol] = s; });
+  const coMap = {};
+  (companies.results || companies).forEach(c => { coMap[c.symbol] = c; });
+
+  // Load financials for each selected company
+  const finData = {};
+  await Promise.all(selectedSymbols.map(async symbol => {
+    const r = await fetch(`${API}/companies/${symbol}/financials/`);
+    finData[symbol] = await r.json();
+  }));
+
+  // Build data rows
+  const rowData = selectedSymbols.reduce((acc, sym) => {
+    const co = coMap[sym] || {};
+    const sc = scoreMap[sym] || {};
+    const fin = finData[sym] || {};
+    const pl = (fin.profit_loss || []).filter(r => r.year_label !== 'TTM');
+    const latestPL = pl[pl.length - 1] || {};
+    const latestBS = (fin.balance_sheet || []).filter(r => r.year_label !== 'TTM').slice(-1)[0] || {};
+    acc[sym] = {
+      ...co, ...sc,
+      latest_sales: latestPL.sales,
+      latest_profit: latestPL.net_profit,
+      opm_pct: latestPL.opm_pct,
+      debt_to_equity: latestBS.debt_to_equity,
+      pl_series: pl,
+    };
+    return acc;
+  }, {});
+
+  // Render table
+  document.getElementById('compare-card').style.display = '';
+  document.getElementById('compare-header').innerHTML =
+    '<th>Metric</th>' + selectedSymbols.map(s => `<th class="text-center">${rowData[s]?.company_name || s}</th>`).join('');
+
+  document.getElementById('compare-body').innerHTML = METRICS.map(m => `
+    <tr>
+      <td class="font-medium text-gray-600">${m.label}</td>
+      ${selectedSymbols.map(s => {
+        const val = rowData[s]?.[m.key];
+        return `<td class="text-center">${m.fmt(val)}</td>`;
+      }).join('')}
+    </tr>
+  `).join('');
+
+  // Revenue trend chart
+  document.getElementById('compare-chart-card').style.display = '';
+  if (compareChart) compareChart.destroy();
+  const colors = ['#1F4E79','#2ECC71','#E74C3C','#F39C12'];
+  const allYears = [...new Set(
+    Object.values(rowData).flatMap(d => d.pl_series.map(r => r.year_label))
+  )].sort();
+
+  compareChart = new Chart(document.getElementById('compareRevChart'), {
+    type: 'line',
+    data: {
+      labels: allYears,
+      datasets: selectedSymbols.map((sym, i) => ({
+        label: rowData[sym]?.company_name || sym,
+        data: allYears.map(y => {
+          const row = rowData[sym]?.pl_series?.find(r => r.year_label === y);
+          return row ? row.sales : null;
+        }),
+        borderColor: colors[i],
+        tension: 0.3,
+        pointRadius: 2,
+        spanGaps: true,
+      }))
+    },
+    options: { responsive:true, maintainAspectRatio:false }
+  });
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('#compare-search') && !e.target.closest('#search-dropdown'))
+    document.getElementById('search-dropdown').classList.add('hidden');
+});
+
+init();
+</script>
+{% endblock %}

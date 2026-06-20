@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ sector_name }} Sector{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1 id="sector-title">{{ sector_name }}</h1>
+  <p>Sector overview — all companies, rankings, and trends</p>
+</div>
+
+<!-- Sector KPIs -->
+<div class="grid grid-cols-4 gap-4 mb-6">
+  <div class="kpi-card"><div class="kpi-value" id="kpi-count">—</div><div class="kpi-label">Companies</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpi-avg-opm">—</div><div class="kpi-label">Avg OPM%</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpi-avg-de">—</div><div class="kpi-label">Avg D/E</div></div>
+  <div class="kpi-card"><div class="kpi-value" id="kpi-avg-score">—</div><div class="kpi-label">Avg Health Score</div></div>
+</div>
+
+<div class="grid grid-cols-3 gap-6 mb-6">
+  <!-- Revenue trend -->
+  <div class="col-span-2 card">
+    <h3 class="font-bold text-navy mb-3">Combined Sector Revenue (₹ Cr)</h3>
+    <div class="chart-container"><canvas id="sectorRevChart"></canvas></div>
+  </div>
+  <!-- Top/Bottom -->
+  <div class="card">
+    <h3 class="font-bold text-green-700 mb-2 text-sm">Top 3 by Health Score</h3>
+    <div id="top3-list" class="space-y-1 mb-4 text-sm"></div>
+    <h3 class="font-bold text-red-700 mb-2 text-sm">Bottom 3 by Health Score</h3>
+    <div id="bottom3-list" class="space-y-1 text-sm"></div>
+  </div>
+</div>
+
+<!-- Company table -->
+<div class="card overflow-x-auto">
+  <table class="fin-table">
+    <thead><tr>
+      <th>Company</th><th class="num">Health Score</th><th>Label</th>
+      <th class="num">OPM%</th><th class="num">D/E</th>
+    </tr></thead>
+    <tbody id="sector-companies-tbody">
+      <tr><td colspan="5" class="text-center text-gray-400 py-6">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+const API = 'http://127.0.0.1:8000/api/v1';
+const SECTOR = '{{ sector_name|escapejs }}';
+
+async function loadSector() {
+  const [coRes, scoreRes] = await Promise.all([
+    fetch(`${API}/companies/?page_size=100`),
+    fetch(`${API}/scores/`),
+  ]);
+  const companies = await coRes.json();
+  const scores = await scoreRes.json();
+  const scoreMap = {};
+  (scores.results || scores).forEach(s => { scoreMap[s.symbol] = s; });
+
+  let sectorCompanies = (companies.results || companies)
+    .filter(c => c.sector_name === SECTOR)
+    .map(c => ({ ...c, ...(scoreMap[c.symbol] || {}) }));
+
+  sectorCompanies.sort((a,b) => (b.overall_score||0) - (a.overall_score||0));
+
+  // KPIs
+  document.getElementById('kpi-count').textContent = sectorCompanies.length;
+  const avg = (arr, key) => {
+    const vals = arr.map(c => parseFloat(c[key])).filter(v => !isNaN(v));
+    return vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2) : '—';
+  };
+  document.getElementById('kpi-avg-opm').textContent = avg(sectorCompanies, 'opm_pct') + '%';
+  document.getElementById('kpi-avg-de').textContent = avg(sectorCompanies, 'debt_to_equity');
+  document.getElementById('kpi-avg-score').textContent = avg(sectorCompanies, 'overall_score');
+
+  // Top/Bottom 3
+  document.getElementById('top3-list').innerHTML = sectorCompanies.slice(0,3).map(c => `
+    <a href="/company/${c.symbol}/" class="flex justify-between hover:text-navy">
+      <span>${c.company_name||c.symbol}</span><span class="font-mono">${(c.overall_score||0).toFixed(1)}</span>
+    </a>`).join('');
+  document.getElementById('bottom3-list').innerHTML = sectorCompanies.slice(-3).reverse().map(c => `
+    <a href="/company/${c.symbol}/" class="flex justify-between hover:text-navy">
+      <span>${c.company_name||c.symbol}</span><span class="font-mono">${(c.overall_score||0).toFixed(1)}</span>
+    </a>`).join('');
+
+  // Table
+  document.getElementById('sector-companies-tbody').innerHTML = sectorCompanies.length
+    ? sectorCompanies.map(c => `
+        <tr class="cursor-pointer" onclick="location.href='/company/${c.symbol}/'">
+          <td><div class="font-semibold">${c.company_name||c.symbol}</div>
+              <div class="text-xs text-gray-400 font-mono">${c.symbol}</div></td>
+          <td class="num font-mono font-bold">${c.overall_score ? parseFloat(c.overall_score).toFixed(1) : '—'}</td>
+          <td><span class="${healthBadgeClass(c.health_label)}">${c.health_label||'—'}</span></td>
+          <td class="num">${fmtPct(c.opm_pct)}</td>
+          <td class="num">${c.debt_to_equity!==null?parseFloat(c.debt_to_equity||0).toFixed(2):'—'}</td>
+        </tr>`).join('')
+    : '<tr><td colspan="5" class="text-center text-gray-400 py-6">No companies found in this sector.</td></tr>';
+
+  // Revenue chart — fetch financials for up to 15 companies to keep it fast
+  const subset = sectorCompanies.slice(0, 15);
+  const finResults = await Promise.all(subset.map(c =>
+    fetch(`${API}/companies/${c.symbol}/financials/`).then(r => r.json()).catch(() => null)
+  ));
+
+  const yearTotals = {};
+  finResults.forEach(fin => {
+    if (!fin) return;
+    (fin.profit_loss || []).forEach(r => {
+      if (r.year_label === 'TTM') return;
+      yearTotals[r.year_label] = (yearTotals[r.year_label] || 0) + (parseFloat(r.sales) || 0);
+    });
+  });
+  const years = Object.keys(yearTotals).sort();
+
+  new Chart(document.getElementById('sectorRevChart'), {
+    type: 'line',
+    data: {
+      labels: years,
+      datasets: [{
+        label: SECTOR + ' Total Revenue',
+        data: years.map(y => yearTotals[y]),
+        borderColor: '#1F4E79', backgroundColor: 'rgba(31,78,121,0.1)',
+        fill: true, tension: 0.3, pointRadius: 3,
+      }]
+    },
+    options: { responsive:true, maintainAspectRatio:false }
+  });
+}
+
+loadSector();
+</script>
+{% endblock %}
