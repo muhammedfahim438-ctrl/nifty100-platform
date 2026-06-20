@@ -21,7 +21,7 @@ class DimSector(models.Model):
     sector_id = models.IntegerField(primary_key=True)
     sector_name = models.CharField(max_length=100)
     sector_code = models.CharField(max_length=20, null=True, blank=True)
-    description = models.TextField(null=True, blank=True)
+
 
     class Meta:
         managed = False
@@ -38,7 +38,7 @@ class DimCompany(models.Model):
         DimSector, on_delete=models.DO_NOTHING, db_column='sector_id',
         null=True, blank=True, related_name='companies'
     )
-    sub_sector = models.CharField(max_length=100, null=True, blank=True)
+
     company_logo = models.CharField(max_length=500, null=True, blank=True)
     website = models.CharField(max_length=500, null=True, blank=True)
     nse_url = models.CharField(max_length=500, null=True, blank=True)
@@ -46,8 +46,8 @@ class DimCompany(models.Model):
     face_value = models.FloatField(null=True, blank=True)
     book_value = models.FloatField(null=True, blank=True)
     about_company = models.TextField(null=True, blank=True)
-    roce_percentage = models.FloatField(null=True, blank=True)
-    roe_percentage = models.FloatField(null=True, blank=True)
+    roce_percentage = models.FloatField(db_column='roce_pct', null=True, blank=True)
+    roe_percentage = models.FloatField(db_column='roe_pct', null=True, blank=True)
 
     class Meta:
         managed = False
@@ -134,12 +134,12 @@ class FactBalanceSheet(models.Model):
     fixed_assets = models.FloatField(null=True, blank=True)
     cwip = models.FloatField(null=True, blank=True)
     investments = models.FloatField(null=True, blank=True)
-    other_assets = models.FloatField(null=True, blank=True)
+    other_assets = models.FloatField(db_column='other_asset', null=True, blank=True)
     total_assets = models.FloatField(null=True, blank=True)
     # Computed columns
     debt_to_equity = models.FloatField(null=True, blank=True)
     equity_ratio = models.FloatField(null=True, blank=True)
-    book_value_per_share = models.FloatField(null=True, blank=True)
+
 
     class Meta:
         managed = False
@@ -160,7 +160,7 @@ class FactCashFlow(models.Model):
     net_cash_flow = models.FloatField(null=True, blank=True)
     # Computed columns
     free_cash_flow = models.FloatField(null=True, blank=True)
-    cash_conversion_ratio = models.FloatField(null=True, blank=True)
+
 
     class Meta:
         managed = False

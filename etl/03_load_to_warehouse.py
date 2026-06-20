@@ -581,7 +581,7 @@ def load_fact_cash_flow(engine, year_map: dict) -> None:
 def load_fact_analysis(engine) -> None:
     """Load fact_analysis from analysis.csv."""
     logger.info("Loading fact_analysis...")
-    df = pd.read_csv(CLEAN_DIR / "prosandcons.csv", dtype=str)
+    df = pd.read_csv(CLEAN_DIR / "analysis.csv", dtype=str)   # FIX: was prosandcons.csv
     df = df.replace({np.nan: None})
     count = 0
     skipped = 0

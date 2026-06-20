@@ -15,14 +15,14 @@ urlpatterns = [
     # Public REST API v1
     path('api/v1/', include('api.urls')),
 
-    # Channel Partner API
+    # Channel Partner API (HMAC-authenticated)
     path('api/partner/v1/', include('api_management.partner_urls')),
 
     # Accounts (login/logout)
     path('accounts/', include('accounts.urls')),
 
-    # Admin Insights Dashboard (we'll build this in the next step)
-    # path('admin-insights/', include('accounts.admin_urls')),
+    # Admin Insights Dashboard (staff-only)
+    path('admin-insights/', include('admin_insights.urls')),
 
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

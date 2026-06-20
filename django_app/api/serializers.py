@@ -14,7 +14,7 @@ from companies.models import (
 class SectorSerializer(serializers.ModelSerializer):
     class Meta:
         model = DimSector
-        fields = ['sector_id', 'sector_name', 'sector_code', 'description']
+        fields = ['sector_id', 'sector_name', 'sector_code']
 
 
 class CompanyListSerializer(serializers.ModelSerializer):
@@ -24,7 +24,7 @@ class CompanyListSerializer(serializers.ModelSerializer):
     class Meta:
         model = DimCompany
         fields = [
-            'symbol', 'company_name', 'sector_name', 'sub_sector',
+            'symbol', 'company_name', 'sector_name',
             'company_logo', 'website', 'nse_url', 'bse_url',
             'roce_percentage', 'roe_percentage',
         ]
@@ -37,7 +37,7 @@ class CompanyDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = DimCompany
         fields = [
-            'symbol', 'company_name', 'sector_name', 'sub_sector',
+            'symbol', 'company_name', 'sector_name',
             'company_logo', 'website', 'nse_url', 'bse_url',
             'face_value', 'book_value', 'about_company',
             'roce_percentage', 'roe_percentage',
@@ -78,7 +78,6 @@ class CashFlowSerializer(serializers.ModelSerializer):
         fields = [
             'year_label', 'operating_activity', 'investing_activity',
             'financing_activity', 'net_cash_flow', 'free_cash_flow',
-            'cash_conversion_ratio',
         ]
 
 

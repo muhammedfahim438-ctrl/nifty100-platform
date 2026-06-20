@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "api_management",
     "dashboard",
     "accounts",
+    "admin_insights",
     "api",
 ]
 
@@ -158,7 +159,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon"     : "100/hour",   # public API anonymous limit
         "user"     : "1000/hour",  # authenticated user limit
-        "login"    : "5/min",      # JWT login endpoint hard limit (Step 8)
+        "login"    : "5/min",      # JWT login endpoint hard limit
     },
 }
 
@@ -204,6 +205,32 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE          = "Asia/Kolkata"
 
 # ─────────────────────────────────────────────
-# Power BI Gateway Token (used in Step 10 tasks)
+# Channel Partner API — Rate Limits per tier
+# Required by api_management/throttling.py
+# ─────────────────────────────────────────────
+RATE_LIMITS = {
+    "BASIC":      {"minute": 10,  "hour": 100,   "day": 500},
+    "PRO":        {"minute": 60,  "hour": 1000,  "day": 10000},
+    "ENTERPRISE": {"minute": 300, "hour": 10000, "day": None},
+}
+
+# ─────────────────────────────────────────────
+# Celery Beat — Nightly Scheduled Tasks
+# ─────────────────────────────────────────────
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "refresh-all-scores-nightly": {
+        "task": "ml_engine.tasks.refresh_all_scores",
+        "schedule": crontab(hour=2, minute=0),
+    },
+    "run-anomaly-detection-nightly": {
+        "task": "ml_engine.tasks.run_anomaly_detection",
+        "schedule": crontab(hour=3, minute=0),
+    },
+}
+
+# ─────────────────────────────────────────────
+# Power BI Gateway Token
 # ─────────────────────────────────────────────
 PBI_GATEWAY_TOKEN = config("PBI_GATEWAY_TOKEN", default="")
