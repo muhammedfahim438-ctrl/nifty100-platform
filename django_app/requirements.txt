@@ -20,10 +20,10 @@ celery[redis]==5.3.*
 python-decouple==3.8
 
 # ── Data / ML (pre-built wheels — avoids Windows Meson/compiler issues) ───────
-numpy==2.2.6
-pandas==2.2.3
+numpy>=2.4.0
+pandas>=3.0.0
 sqlalchemy==2.0.*
-scikit-learn==1.6.*
+scikit-learn>=1.8.0
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==7.4.*
@@ -31,8 +31,8 @@ pytest-django==4.7.*
 pytest-cov==4.1.*
 
 # ── Code Quality & Security ───────────────────────────────────────────────────
-bandit==1.7.*
-safety==3.2.*
-black==24.*
-isort==5.13.*
+bandit>=1.9.0
+safety>=3.8.0
+black>=26.0.0
+isort>=8.0.0
 flake8==7.*
